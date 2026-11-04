@@ -17,7 +17,8 @@ ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY 중 **하나만** 있으면 
   ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL  모델 ID 강제 지정(비우면 기본 후보를 차례로 시도)
   BRIEF_MAX_SEARCHES  검색 호출 상한 (기본 10, 4~20)
   BRIEF_MIN_SEARCHES  이보다 검색을 적게 한 초안은 반려하고 재시도 (기본 6)
-  BRIEF_EFFORT        추론 강도 low | medium | high (기본 medium)
+  BRIEF_EFFORT        추론 강도 low | medium | high | xhigh | max (기본 medium; xhigh/max 는 Claude 전용, 다른 제공자는 high 로 취급)
+  BRIEF_MODEL         제공자와 무관하게 모델 지정. 쉼표로 여러 개면 순서대로 시도 (예: claude-fable-5-1,claude-opus-5-5)
 """
 
 from __future__ import annotations
@@ -102,9 +103,12 @@ MODEL_CHAINS = {
 MAX_OUTPUT_TOKENS = 24000
 # 검색 호출 수 상한과 추론 강도. 비용의 큰 부분이라 환경 변수로 조절한다.
 MAX_SEARCHES = max(4, min(20, int(os.environ.get("BRIEF_MAX_SEARCHES") or 10)))
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")  # xhigh/max 는 Claude 에서만 구분됨
 EFFORT = (os.environ.get("BRIEF_EFFORT") or "medium").strip().lower()
-if EFFORT not in ("low", "medium", "high"):
+if EFFORT not in EFFORT_LEVELS:
     EFFORT = "medium"
+# OpenAI reasoning.effort 와 Gemini thinking_level 은 low/medium/high 까지만 받는다.
+EFFORT_3 = {"xhigh": "high", "max": "high"}.get(EFFORT, EFFORT)
 # 이보다 검색을 적게 하고 쓴 초안은 반려하고 다시 시킨다(품질 가드).
 MIN_SEARCHES = max(0, min(MAX_SEARCHES, int(os.environ.get("BRIEF_MIN_SEARCHES") or 6)))
 # 모델이 검색만 하고 최종 JSON 없이 턴을 끝내면, 같은 대화(검색 결과가 남아 있는 상태)에서 이어서 쓰게 한다.
@@ -684,7 +688,7 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
         [
             {
                 "type": "web_search",
-                "search_context_size": "medium" if EFFORT != "high" else "high",
+                "search_context_size": "medium" if EFFORT in ("low", "medium") else "high",
                 "user_location": {"type": "approximate", "country": "KR", "timezone": "Asia/Seoul"},
             }
         ]
@@ -694,10 +698,10 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     variants = [
         {
             "tools": tools,
-            "reasoning": {"effort": EFFORT},
+            "reasoning": {"effort": EFFORT_3},
             "include": ["web_search_call.action.sources"],
         },
-        {"tools": tools, "reasoning": {"effort": EFFORT}},
+        {"tools": tools, "reasoning": {"effort": EFFORT_3}},
         {"tools": tools},
     ]
     seen: set[str] = set()
@@ -781,7 +785,7 @@ def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     tools = [types.Tool(google_search=types.GoogleSearch())] if use_tools else []
     variants = [
-        {"thinking_config": types.ThinkingConfig(thinking_level=EFFORT)},
+        {"thinking_config": types.ThinkingConfig(thinking_level=EFFORT_3)},
         {"thinking_config": types.ThinkingConfig(thinking_budget=-1)},
         {},
     ]
@@ -869,8 +873,14 @@ def pick_provider(explicit: str | None) -> str:
 
 
 def model_candidates(provider: str) -> list[str]:
-    forced = os.environ.get(MODEL_ENV[provider], "").strip()
-    return [forced] if forced else list(MODEL_CHAINS[provider])
+    """BRIEF_MODEL(제공자 공통) 또는 ANTHROPIC_MODEL 등으로 지정한 모델을 앞에서부터 시도한다.
+    쉼표로 여러 개를 적으면 순서대로 시도한다(예: "claude-fable-5-1,claude-opus-5-5")."""
+    forced = (
+        os.environ.get("BRIEF_MODEL", "").strip() or os.environ.get(MODEL_ENV[provider], "").strip()
+    )
+    if forced:
+        return [m.strip() for m in forced.split(",") if m.strip()]
+    return list(MODEL_CHAINS[provider])
 
 
 def run_with_model_chain(

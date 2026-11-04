@@ -12,6 +12,18 @@ on:
         description: "브리핑 날짜 YYYY-MM-DD (비우면 오늘, KST)"
         required: false
         default: ""
+      model:
+        description: "이번 실행만 쓸 모델 (쉼표로 여러 개 가능, 예: claude-fable-5-1,claude-opus-5-5). 비우면 기본값"
+        required: false
+        default: ""
+      effort:
+        description: "이번 실행만 쓸 추론 강도 low|medium|high|xhigh|max. 비우면 기본값(medium)"
+        required: false
+        default: ""
+      max_searches:
+        description: "이번 실행만 쓸 검색 상한 4~20. 비우면 기본값(10)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -51,8 +63,9 @@ jobs:
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
-          BRIEF_MAX_SEARCHES: ${{ vars.BRIEF_MAX_SEARCHES }}
-          BRIEF_EFFORT: ${{ vars.BRIEF_EFFORT }}
+          BRIEF_MODEL: ${{ inputs.model }}
+          BRIEF_MAX_SEARCHES: ${{ inputs.max_searches || vars.BRIEF_MAX_SEARCHES }}
+          BRIEF_EFFORT: ${{ inputs.effort || vars.BRIEF_EFFORT }}
           BRIEF_MIN_SEARCHES: ${{ vars.BRIEF_MIN_SEARCHES }}
           BRIEF_DATE: ${{ inputs.date }}
         run: |

@@ -33,7 +33,7 @@ ai-brief/
 
    **키는 코드·워크플로 파일·커밋에 절대 넣지 않습니다.** GitHub Secrets 는 암호화되어 저장되고 실행 로그에서도 마스킹됩니다. 로컬에서 돌릴 때는 `ai-brief/.env`(`.gitignore` 대상)에만 둡니다(아래 4번).
 
-   여러 개를 넣으면 Claude → GPT → Gemini 순으로 첫 번째 키를 씁니다. 특정 제공자를 강제하려면 *Variables* 탭에 `BRIEF_PROVIDER` = `anthropic` / `openai` / `gemini` 를, 모델을 고정하려면 `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL` 변수를 추가합니다. 기본값은 비용을 고려한 절약형(검색 10회, 추론 강도 medium)이며, `BRIEF_MAX_SEARCHES`(4~20), `BRIEF_EFFORT`(low/medium/high) 변수로 조절합니다. 최고 품질을 원하면 `ANTHROPIC_MODEL=claude-opus-5-5`, `BRIEF_MAX_SEARCHES=16`, `BRIEF_EFFORT=high`.
+   여러 개를 넣으면 Claude → GPT → Gemini 순으로 첫 번째 키를 씁니다. 특정 제공자를 강제하려면 *Variables* 탭에 `BRIEF_PROVIDER` = `anthropic` / `openai` / `gemini` 를, 모델을 고정하려면 `ANTHROPIC_MODEL` / `OPENAI_MODEL` / `GEMINI_MODEL` 변수를 추가합니다. 기본값은 비용을 고려한 절약형(검색 10회, 추론 강도 medium)이며, `BRIEF_MAX_SEARCHES`(4~20), `BRIEF_EFFORT`(low/medium/high) 변수로 조절합니다. 최고 품질을 원하면 `BRIEF_MODEL=claude-fable-5-1,claude-opus-5-5`(앞 모델을 못 쓰면 다음 모델), `BRIEF_MAX_SEARCHES=16`, `BRIEF_EFFORT=xhigh`(xhigh/max 는 Claude 전용). 한 번만 다른 설정으로 돌려 보려면 *Run workflow* 창의 model / effort / max_searches 입력칸에 적으면 그 실행에만 적용됩니다.
 
 2. **Pages 켜기** — *Settings → Pages → Build and deployment → Source* 를 **GitHub Actions** 로 바꿉니다. (워크플로가 자동으로 켜 보지만, 권한 문제로 실패하면 이 설정이 필요합니다.)
 

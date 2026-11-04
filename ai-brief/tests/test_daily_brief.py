@@ -122,8 +122,12 @@ def test_pick_provider_uses_first_available_key(mod, monkeypatch):
 
 
 def test_model_candidates_respects_override(mod, monkeypatch):
+    monkeypatch.delenv("BRIEF_MODEL", raising=False)
     monkeypatch.setenv("OPENAI_MODEL", "gpt-custom")
     assert mod.model_candidates("openai") == ["gpt-custom"]
+    monkeypatch.setenv("BRIEF_MODEL", "claude-fable-5-1, claude-opus-5-5")
+    assert mod.model_candidates("anthropic") == ["claude-fable-5-1", "claude-opus-5-5"]
+    monkeypatch.delenv("BRIEF_MODEL")
     monkeypatch.delenv("OPENAI_MODEL")
     assert mod.model_candidates("openai")[0] == "gpt-6.1-terra"
 
