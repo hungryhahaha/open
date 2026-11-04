@@ -43,14 +43,18 @@ def test_extract_json_without_fence(mod):
 
 
 def test_validate_maps_aliases_and_checks_sources(mod):
-    seen = {"https://www.example.com/a/", "https://news.site.co.kr/story/1"}
+    seen = {
+        "https://www.example.com/a/",
+        "https://news.site.co.kr/story/1",
+        "https://fortune.com/x",
+    }
     raw = {
         "oneliner": "한 줄",
         "items": [
             _item(1, "모델·제품", "https://example.com/a"),
             _item(2, "policy", "https://site.co.kr/other"),  # 같은 등록 도메인 → 통과
             _item(3, "practice", "https://unknown.example.org/x"),  # 검색 결과에 없음 → 제외
-            _item(4, "korea", "https://example.com/a"),
+            _item(4, "korea", "https://fortune.com/x"),
             {
                 "category": "market",
                 "title": "",
@@ -82,7 +86,14 @@ def test_validate_requires_min_items_and_limits_category(mod):
 
 
 def test_validate_drops_repeated_titles(mod):
-    raw = {"items": [_item(1), _item(2, "policy"), _item(3, "korea"), _item(4, "tech")]}
+    raw = {
+        "items": [
+            _item(1, url="https://a.com/1"),
+            _item(2, "policy", "https://b.com/2"),
+            _item(3, "korea", "https://c.com/3"),
+            _item(4, "tech", "https://d.com/4"),
+        ]
+    }
     brief, _ = mod.validate_brief(raw, "2026-11-03", set(), recent_titles={"제목 1"})
     assert brief is not None
     assert [i["title"] for i in brief["items"]] == ["제목 2", "제목 3", "제목 4"]
@@ -149,3 +160,25 @@ def test_env_files_are_gitignored():
         check=False,
     )
     assert tracked.stdout.strip() == "", "실제 .env 파일이 git 에 추적되고 있음"
+
+
+def test_validate_rejects_aggregators_and_duplicate_domains(mod):
+    raw = {
+        "items": [
+            _item(1, "model", "https://theneuron.ai/digest/x"),  # 집계 사이트 → 제외
+            _item(2, "policy", "https://reuters.com/a"),
+            _item(3, "korea", "https://www.reuters.com/b"),  # 같은 매체 중복 → 제외
+            _item(4, "market", "https://fortune.com/c"),
+            _item(5, "tech", "https://anthropic.com/news/d"),
+        ],
+        "concept": {"term": "t", "body": "b"},
+    }
+    brief, problems = mod.validate_brief(raw, "2026-11-03", set())
+    assert brief is not None
+    assert [i["source_url"] for i in brief["items"]] == [
+        "https://reuters.com/a",
+        "https://fortune.com/c",
+        "https://anthropic.com/news/d",
+    ]
+    assert any("집계" in p for p in problems)
+    assert any("중복" in p for p in problems)

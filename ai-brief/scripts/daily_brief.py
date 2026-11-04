@@ -16,6 +16,7 @@ ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY 중 **하나만** 있으면 
   BRIEF_PROVIDER      anthropic | openai | gemini (비우면 키가 있는 첫 제공자 자동 선택)
   ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL  모델 ID 강제 지정(비우면 기본 후보를 차례로 시도)
   BRIEF_MAX_SEARCHES  검색 호출 상한 (기본 10, 4~20)
+  BRIEF_MIN_SEARCHES  이보다 검색을 적게 한 초안은 반려하고 재시도 (기본 6)
   BRIEF_EFFORT        추론 강도 low | medium | high (기본 medium)
 """
 
@@ -104,13 +105,40 @@ MAX_SEARCHES = max(4, min(20, int(os.environ.get("BRIEF_MAX_SEARCHES") or 10)))
 EFFORT = (os.environ.get("BRIEF_EFFORT") or "medium").strip().lower()
 if EFFORT not in ("low", "medium", "high"):
     EFFORT = "medium"
+# 이보다 검색을 적게 하고 쓴 초안은 반려하고 다시 시킨다(품질 가드).
+MIN_SEARCHES = max(0, min(MAX_SEARCHES, int(os.environ.get("BRIEF_MIN_SEARCHES") or 6)))
+# 뉴스레터·집계·커뮤니티 사이트는 출처로 인정하지 않는다(원문을 찾아 인용해야 함).
+AGGREGATOR_DOMAINS = {
+    "theneuron.ai",
+    "aiweekly.co",
+    "substack.com",
+    "dev.to",
+    "medium.com",
+    "linkedin.com",
+    "reddit.com",
+    "x.com",
+    "twitter.com",
+    "facebook.com",
+    "youtube.com",
+    "wikipedia.org",
+    "biztoc.com",
+    "digg.com",
+    "manifold.markets",
+    "news.ycombinator.com",
+    "tldr.tech",
+    "beehiiv.com",
+    "explainx.ai",
+    "aitoolsrecap.com",
+    "simplifyaitools.com",
+}
 
 SYSTEM_PROMPT = """당신은 AX(AI 전환) 기획자 한 사람만을 위한 'AI 데일리 브리프'의 편집자입니다.
 목표: 사용자가 매일 3분 안에 꼭 알아야 할 AI 소식을 읽고, 꾸준히 쌓아 AI 전문가가 되게 하는 것.
 
 ## 조사 원칙
-- 웹검색 도구를 최소 6회 이상, 서로 다른 각도로 사용합니다: 종합 AI 뉴스(영문), 주요 벤더(OpenAI·Anthropic·Google·Microsoft·Meta 등) 발표, 기업 도입 사례·보고서, 규제·정책(EU AI Act, 미국, 한국 AI기본법 등), 국내 AX 동향(한국어 검색), 핵심 수치 확인용 검색.
+- 웹검색 도구를 최소 8회 이상, 서로 다른 각도로 사용합니다: 종합 AI 뉴스(영문), 주요 벤더(OpenAI·Anthropic·Google·Microsoft·Meta 등) 발표, 기업 도입 사례·보고서, 규제·정책(EU AI Act, 미국, 한국 AI기본법 등), 국내 AX 동향(한국어 검색), 핵심 수치 확인용 검색.
 - 숫자·날짜·회사명은 1차 출처(공식 발표, 공시, 정부 자료)가 있거나 신뢰할 수 있는 매체 2곳 이상이 일치할 때만 씁니다.
+- 출처 다양성: 항목마다 서로 다른 매체를 인용합니다. 뉴스레터·집계·커뮤니티 사이트(The Neuron, Substack, dev.to, Medium, Reddit, LinkedIn 등)는 출처로 쓰지 않습니다. 거기서 본 소식은 원문(벤더 공식 블로그, 공시, 정부 자료, Reuters·Bloomberg·연합뉴스 같은 주요 매체)을 다시 검색해 인용합니다.
 - 예측시장, 루머, 출처 불명 SEO 사이트, 미확인 모델명은 쓰지 않습니다. 확인이 안 되는 수치는 '보도 기준'이라고 표시합니다.
 - 최근 24~48시간 소식을 우선하되, 느린 날에는 억지로 채우지 말고 최근 발표된 신뢰할 수 있는 보고서나 기획자에게 중요한 배경 지식으로 최소 3개를 맞춥니다.
 - 이전 브리핑에 이미 실린 소식은 큰 후속 변화가 있을 때만 다루고, 그 경우 제목에 '(후속)'을 붙입니다.
@@ -290,6 +318,7 @@ def validate_brief(
     items_in = raw.get("items") if isinstance(raw.get("items"), list) else []
     items: list[dict] = []
     per_cat: dict[str, int] = {}
+    used_domains: set[str] = set()
     for i, it in enumerate(items_in, 1):
         if not isinstance(it, dict):
             problems.append(f"item {i}: 객체가 아님")
@@ -318,6 +347,15 @@ def validate_brief(
         if seen_norm and url not in seen_norm and registered_domain(url) not in seen_domains:
             problems.append(f"item {i}: source_url 이 검색 결과에 없음 ({url})")
             continue
+        dom = registered_domain(url)
+        if dom in AGGREGATOR_DOMAINS:
+            problems.append(
+                f"item {i}: 뉴스레터/집계 사이트 출처({dom})는 인정하지 않음, 원문 출처 필요"
+            )
+            continue
+        if dom in used_domains:
+            problems.append(f"item {i}: 같은 출처({dom}) 중복, 다른 매체 필요")
+            continue
         if title in recent_titles:
             problems.append(f"item {i}: 이전 브리핑과 제목이 같음")
             continue
@@ -325,6 +363,7 @@ def validate_brief(
             problems.append(f"item {i}: '{cat}' 카테고리 초과로 제외")
             continue
         per_cat[cat] = per_cat.get(cat, 0) + 1
+        used_domains.add(dom)
         items.append(
             {
                 "category": cat,
@@ -410,16 +449,26 @@ def recent_context(briefs: list[dict], limit: int = RECENT_FOR_PROMPT) -> str:
     return "\n".join(lines)
 
 
-def build_user_prompt(date: str, briefs: list[dict]) -> str:
+def build_user_prompt(date: str, briefs: list[dict], extra: str = "") -> str:
+    note = f"\n\n## 주의\n{extra}" if extra else ""
     return f"""오늘 날짜(한국 시간): {date}
 
 ## 최근 브리핑 (중복 금지, 개념도 겹치지 않게)
 {recent_context(briefs)}
 
+## 추천 검색어 (각각 실제로 검색한 뒤, 후보 소식의 수치를 확인하는 검색을 더 합니다)
+1. "AI news {date}" 와 "biggest AI news this week"
+2. OpenAI 최근 발표 / Anthropic·Claude 최근 발표
+3. Google Gemini 최근 발표 / Microsoft Copilot / Meta AI
+4. enterprise AI agents adoption report / AI ROI case study (최근 보고서·사례)
+5. AI regulation (EU AI Act, 미국) / 한국 AI 기본법·정부 정책
+6. 한국어: "AI 뉴스 오늘", "AX 기업 도입 사례"
+7. 후보로 고른 소식마다 원문(벤더 공식 블로그, 공시, 주요 매체) 확인 검색
+
 ## 할 일
-1. 웹검색을 최소 6회 이상 수행해 최근 24~48시간의 AI 소식을 조사합니다. 필요하면 핵심 수치를 확인하는 검색을 더 합니다.
-2. 선별 기준에 따라 3~5개를 고르고, '오늘의 개념' 1개를 정합니다.
-3. 마지막에 지정된 JSON 하나를 ```json 펜스 안에 출력합니다. "date" 는 "{date}" 로 씁니다."""
+1. 위 검색어를 포함해 웹검색을 최소 8회 이상 수행해 최근 24~48시간의 AI 소식을 조사합니다.
+2. 선별 기준에 따라 3~5개를 고르고(항목마다 다른 매체, 집계 사이트 금지), '오늘의 개념' 1개를 정합니다.
+3. 마지막에 지정된 JSON 하나를 ```json 펜스 안에 출력합니다. "date" 는 "{date}" 로 씁니다.{note}"""
 
 
 def build_repair_prompt(
@@ -433,6 +482,7 @@ def build_repair_prompt(
 새로운 사실을 추가하지 말고 형식만 고쳐 지정된 구조의 JSON 하나만 ```json 펜스 안에 출력하세요.
 - category 는 model/market/policy/practice/tech/korea 영문 키만 사용.
 - source_url 은 반드시 아래 '확인된 URL 목록'에 있는 것(또는 같은 도메인)만 사용. 맞는 URL 이 없으면 그 항목은 삭제.
+- 항목마다 서로 다른 매체(도메인)를 인용. 뉴스레터·집계·커뮤니티 사이트(The Neuron, Substack, dev.to, Medium, Reddit, LinkedIn 등) URL 은 쓰지 않음.
 - 항목은 최소 3개, 최대 5개. "date" 는 "{date}".
 
 ## 검증 오류
@@ -466,7 +516,7 @@ def _looks_like_missing_model(err: Exception) -> bool:
     )
 
 
-def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str]]:
+def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
     import anthropic
 
     client = anthropic.Anthropic()
@@ -487,6 +537,7 @@ def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[
     messages: list[dict] = [{"role": "user", "content": user}]
     seen: set[str] = set()
     texts: list[str] = []
+    searches = 0
 
     def call(extra: dict):
         with client.beta.messages.stream(
@@ -535,6 +586,8 @@ def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[
                 content = getattr(block, "content", None)
                 if getattr(content, "url", None):
                     seen.add(content.url)
+            elif btype == "server_tool_use" and getattr(block, "name", "") == "web_search":
+                searches += 1
             elif btype == "text" and getattr(block, "text", ""):
                 texts.append(block.text)
         if resp.stop_reason == "pause_turn":
@@ -548,10 +601,10 @@ def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[
                 f"anthropic usage: in={usage.input_tokens} out={usage.output_tokens} model={resp.model}"
             )
         break
-    return "\n".join(texts), seen
+    return "\n".join(texts), seen, searches
 
 
-def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str]]:
+def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
     import openai
 
     client = openai.OpenAI()
@@ -601,9 +654,11 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     if resp is None:
         raise RuntimeError(f"OpenAI 요청 실패: {last_err}")
     seen: set[str] = set()
+    searches = 0
     for item in getattr(resp, "output", None) or []:
         itype = getattr(item, "type", "")
         if itype == "web_search_call":
+            searches += 1
             action = getattr(item, "action", None)
             for s in getattr(action, "sources", None) or []:
                 if getattr(s, "url", None):
@@ -618,10 +673,10 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     usage = getattr(resp, "usage", None)
     if usage:
         log(f"openai usage: in={usage.input_tokens} out={usage.output_tokens} model={resp.model}")
-    return getattr(resp, "output_text", "") or "", seen
+    return getattr(resp, "output_text", "") or "", seen, searches
 
 
-def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str]]:
+def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
     from google import genai
     from google.genai import errors, types
 
@@ -652,8 +707,10 @@ def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     if resp is None:
         raise RuntimeError(f"Gemini 요청 실패: {last_err}")
     seen: set[str] = set()
+    searches = 0
     for cand in getattr(resp, "candidates", None) or []:
         gm = getattr(cand, "grounding_metadata", None)
+        searches += len(getattr(gm, "web_search_queries", None) or [])
         for ch in getattr(gm, "grounding_chunks", None) or []:
             web = getattr(ch, "web", None)
             if not web:
@@ -668,10 +725,10 @@ def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str
             f"gemini usage: in={getattr(usage, 'prompt_token_count', '?')} "
             f"out={getattr(usage, 'candidates_token_count', '?')} model={model}"
         )
-    return getattr(resp, "text", None) or "", seen
+    return getattr(resp, "text", None) or "", seen, searches
 
 
-RUNNERS: dict[str, Callable[[str, str, str, bool], tuple[str, set[str]]]] = {
+RUNNERS: dict[str, Callable[[str, str, str, bool], tuple[str, set[str], int]]] = {
     "anthropic": run_anthropic,
     "openai": run_openai,
     "gemini": run_gemini,
@@ -701,14 +758,14 @@ def model_candidates(provider: str) -> list[str]:
 
 def run_with_model_chain(
     provider: str, system: str, user: str, use_tools: bool
-) -> tuple[str, set[str], str]:
+) -> tuple[str, set[str], int, str]:
     runner = RUNNERS[provider]
     errors: list[str] = []
     for model in model_candidates(provider):
         try:
             log(f"{provider}/{model} 호출 (tools={'on' if use_tools else 'off'})")
-            text, seen = runner(model, system, user, use_tools)
-            return text, seen, model
+            text, seen, searches = runner(model, system, user, use_tools)
+            return text, seen, searches, model
         except ModelUnavailable as e:
             errors.append(f"{model}: {str(e)[:160]}")
             log(f"{provider}/{model} 사용 불가, 다음 후보로: {str(e)[:160]}")
@@ -716,7 +773,7 @@ def run_with_model_chain(
 
 
 # ----------------------------------------------------------------------------- 생성
-def generate(provider: str, date: str, briefs: list[dict], attempts: int = 2) -> dict:
+def generate(provider: str, date: str, briefs: list[dict], attempts: int = 3) -> dict:
     recent_titles = {
         str(i.get("title", "")) for b in briefs for i in b.get("items", []) if isinstance(i, dict)
     }
@@ -724,8 +781,24 @@ def generate(provider: str, date: str, briefs: list[dict], attempts: int = 2) ->
     last_problems: list[str] = []
     for attempt in range(1, attempts + 1):
         log(f"생성 시도 {attempt}/{attempts}")
-        text, seen, model = run_with_model_chain(provider, SYSTEM_PROMPT, user, use_tools=True)
-        log(f"검색/인용으로 확인된 URL {len(seen)}개, 응답 {len(text)}자")
+        text, seen, searches, model = run_with_model_chain(
+            provider, SYSTEM_PROMPT, user, use_tools=True
+        )
+        log(f"웹검색 {searches}회, 확인된 URL {len(seen)}개, 응답 {len(text)}자")
+        if searches < MIN_SEARCHES:
+            last_problems = [f"웹검색이 {searches}회뿐 (최소 {MIN_SEARCHES}회)"]
+            log("이번 시도 반려: " + last_problems[0])
+            user = build_user_prompt(
+                date,
+                briefs,
+                extra=(
+                    f"이전 시도는 웹검색이 {searches}회에 그쳐 반려되었습니다. "
+                    f"이번에는 추천 검색어를 각각 실제로 검색해 최소 {max(MIN_SEARCHES, 8)}회 이상 "
+                    "검색한 뒤에만 작성하세요."
+                ),
+            )
+            time.sleep(3)
+            continue
         raw = extract_json(text)
         brief, problems = (
             (None, ["JSON 을 찾지 못함"])
@@ -735,7 +808,9 @@ def generate(provider: str, date: str, briefs: list[dict], attempts: int = 2) ->
         if brief is None:
             log("1차 검증 실패: " + "; ".join(problems))
             repair = build_repair_prompt(text, problems, seen, date)
-            text2, _, model = run_with_model_chain(provider, SYSTEM_PROMPT, repair, use_tools=False)
+            text2, _, _, model = run_with_model_chain(
+                provider, SYSTEM_PROMPT, repair, use_tools=False
+            )
             raw2 = extract_json(text2)
             brief, problems = (
                 (None, ["수정본에서도 JSON 을 찾지 못함"])

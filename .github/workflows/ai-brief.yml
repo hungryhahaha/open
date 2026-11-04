@@ -53,6 +53,7 @@ jobs:
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
           BRIEF_MAX_SEARCHES: ${{ vars.BRIEF_MAX_SEARCHES }}
           BRIEF_EFFORT: ${{ vars.BRIEF_EFFORT }}
+          BRIEF_MIN_SEARCHES: ${{ vars.BRIEF_MIN_SEARCHES }}
           BRIEF_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$BRIEF_DATE" ]; then
