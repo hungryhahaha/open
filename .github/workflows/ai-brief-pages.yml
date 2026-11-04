@@ -1,0 +1,40 @@
+# 브리핑을 새로 만들지 않고 페이지만 다시 배포한다 (index.html 수정, 첫 배포, 수동 재배포용).
+name: AI Daily Brief - deploy page only
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["ai-brief/index.html"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ai-brief
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build site
+        run: |
+          rm -rf _site && mkdir -p _site
+          cp ai-brief/index.html _site/index.html
+          cp -r ai-brief/data _site/data
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

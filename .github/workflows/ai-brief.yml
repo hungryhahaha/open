@@ -1,0 +1,93 @@
+# AI 데일리 브리프: 매일 아침 06:45(KST) 웹을 조사해 ai-brief/data 를 갱신하고 GitHub Pages 에 올린다.
+# 필요한 것: 저장소 Secrets 에 ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY 중 하나.
+# 예약 실행(schedule)은 저장소의 기본 브랜치(main)에서만 돈다.
+name: AI Daily Brief
+
+on:
+  schedule:
+    - cron: "45 21 * * *" # 06:45 KST (UTC+9)
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "브리핑 날짜 YYYY-MM-DD (비우면 오늘, KST)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ai-brief
+  cancel-in-progress: false
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ai-brief/requirements.txt
+
+      - run: pip install -r ai-brief/requirements.txt
+
+      - name: Generate today's brief
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BRIEF_PROVIDER: ${{ vars.BRIEF_PROVIDER }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          BRIEF_MAX_SEARCHES: ${{ vars.BRIEF_MAX_SEARCHES }}
+          BRIEF_EFFORT: ${{ vars.BRIEF_EFFORT }}
+          BRIEF_DATE: ${{ inputs.date }}
+        run: |
+          if [ -n "$BRIEF_DATE" ]; then
+            python ai-brief/scripts/daily_brief.py --date "$BRIEF_DATE"
+          else
+            python ai-brief/scripts/daily_brief.py
+          fi
+
+      - name: Commit brief data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ai-brief/data
+          if git diff --cached --quiet; then
+            echo "변경 없음"
+          else
+            git commit -m "brief: $(TZ=Asia/Seoul date +%F)"
+            git pull --rebase origin "${{ github.ref_name }}"
+            git push origin HEAD:"${{ github.ref_name }}"
+          fi
+
+      - name: Build site
+        run: |
+          rm -rf _site && mkdir -p _site
+          cp ai-brief/index.html _site/index.html
+          cp -r ai-brief/data _site/data
+          touch _site/.nojekyll
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

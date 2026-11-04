@@ -1,0 +1,21 @@
+# ai-brief 코드 변경 시 파싱·검증·인덱스 로직 테스트 (API 호출 없음).
+name: AI Daily Brief - tests
+
+on:
+  pull_request:
+    paths: ["ai-brief/**", "!ai-brief/data/**"]
+  push:
+    branches: [main]
+    paths: ["ai-brief/**", "!ai-brief/data/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest ruff
+      - run: ruff check ai-brief
+      - run: pytest -q ai-brief/tests

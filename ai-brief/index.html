@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI 데일리 브리프</title>
+<meta name="description" content="AX 기획자를 위해 매일 아침 자동으로 갱신되는 AI 핵심 소식 3~5개와 오늘의 개념">
+<meta name="theme-color" content="#1D4ED8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="AI 브리프">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231D4ED8'/%3E%3Cpath d='M18 20h28M18 32h28M18 44h18' stroke='%23fff' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%231D4ED8'/%3E%3Cpath d='M18 20h28M18 32h28M18 44h18' stroke='%23fff' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a one-column briefing sheet (max 640px) with a sticky date bar; today's brief sits on one raised panel, history and glossary follow as ruled lists. */
+:root {
+  --bg: #EEF1F4;
+  --surface: #FFFFFF;
+  --surface-2: #E7EDF3;
+  --fg: #151B22;
+  --muted: #5B6773;
+  --line: #D3DAE1;
+  --accent: #1D4ED8;
+  --accent-fg: #FFFFFF;
+  --ok: #157A47;
+  --c-model: #1D4ED8;
+  --c-market: #0F7A4D;
+  --c-policy: #B45309;
+  --c-practice: #0E7490;
+  --c-tech: #6D28D9;
+  --c-korea: #BE123C;
+  --font-sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1218; --surface: #151C24; --surface-2: #1D2630; --fg: #E7EBEF; --muted: #93A0AC; --line: #2A3540;
+    --accent: #8AB0FF; --accent-fg: #0D1218; --ok: #5BD08A;
+    --c-model: #8AB0FF; --c-market: #5BD08A; --c-policy: #F4B860; --c-practice: #5FD3E8; --c-tech: #C4A5FF; --c-korea: #FF8FA8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1218; --surface: #151C24; --surface-2: #1D2630; --fg: #E7EBEF; --muted: #93A0AC; --line: #2A3540;
+  --accent: #8AB0FF; --accent-fg: #0D1218; --ok: #5BD08A;
+  --c-model: #8AB0FF; --c-market: #5BD08A; --c-policy: #F4B860; --c-practice: #5FD3E8; --c-tech: #C4A5FF; --c-korea: #FF8FA8;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { height: 100%; background: var(--bg); }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-sans); font-size: 15px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  overflow-x: hidden; word-break: keep-all; overflow-wrap: anywhere;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+a { color: var(--accent); text-decoration: none; }
+a:hover, a:focus-visible { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+[hidden] { display: none !important; }
+.wrap {
+  max-width: 640px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* Sticky top bar */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.top .wrap { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 12px; }
+.brand { font-size: 15px; font-weight: 700; letter-spacing: 0.01em; }
+.meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+main .wrap { padding-block: 20px 40px; display: grid; gap: 28px; }
+
+/* Status / empty states */
+.status { color: var(--muted); font-size: 14px; padding: 28px 0; text-align: center; }
+.status strong { color: var(--fg); font-weight: 600; display: block; margin-bottom: 6px; font-size: 15px; }
+
+/* Today's panel */
+.brief {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 18px 16px 6px; display: grid; gap: 0;
+}
+.brief-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; }
+.eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.date { font-size: 22px; font-weight: 600; line-height: 1.25; margin-top: 2px; }
+.oneliner { font-size: 15px; color: var(--fg); line-height: 1.6; padding: 12px 14px; background: var(--surface-2); border-radius: 8px; margin-bottom: 4px; }
+.oneliner b { font-weight: 600; color: var(--accent); margin-right: 6px; }
+
+.readbtn {
+  flex: none; font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1;
+  padding: 8px 11px; border-radius: 999px; border: 1px solid var(--line);
+  background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+.readbtn[aria-pressed="true"] { background: var(--ok); border-color: var(--ok); color: #fff; }
+:root[data-theme="dark"] .readbtn[aria-pressed="true"] { color: #0D1218; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .readbtn[aria-pressed="true"] { color: #0D1218; } }
+
+/* Items */
+.item { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.item-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; line-height: 1; padding: 5px 9px; border-radius: 999px;
+  color: var(--chip, var(--muted)); background: color-mix(in srgb, var(--chip, var(--muted)) 13%, transparent);
+}
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.model { --chip: var(--c-model); }
+.chip.market { --chip: var(--c-market); }
+.chip.policy { --chip: var(--c-policy); }
+.chip.practice { --chip: var(--c-practice); }
+.chip.tech { --chip: var(--c-tech); }
+.chip.korea { --chip: var(--c-korea); }
+.src { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.item h3 { font-size: 17px; font-weight: 600; line-height: 1.4; }
+.sum { font-size: 15px; line-height: 1.65; }
+.why { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.why-label { font-size: 12px; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
+.why p { font-size: 14.5px; line-height: 1.6; }
+.link { font-size: 13.5px; font-weight: 500; justify-self: start; }
+.link::after { content: " ↗"; font-size: 12px; }
+
+/* Concept of the day */
+.concept { display: grid; gap: 8px; }
+.section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; }
+.concept-card { border-left: 3px solid var(--c-tech); padding: 2px 0 2px 14px; display: grid; gap: 6px; }
+.concept-card h3 { font-size: 17px; font-weight: 600; }
+.concept-card h3 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.concept-card p { font-size: 14.5px; line-height: 1.65; }
+
+/* History & glossary */
+.history, .glossary { display: grid; gap: 6px; }
+details { border-top: 1px solid var(--line); }
+details:last-child { border-bottom: 1px solid var(--line); }
+summary {
+  cursor: pointer; list-style: none; padding: 13px 0; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 15px; font-weight: 500;
+}
+summary::-webkit-details-marker { display: none; }
+summary .sub { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 400; white-space: nowrap; font-variant-numeric: tabular-nums; }
+summary .sub .done { color: var(--ok); }
+summary::after { content: "+"; font-family: var(--font-mono); color: var(--muted); margin-left: 4px; }
+details[open] > summary::after { content: "–"; }
+.hist-body { padding: 0 0 14px; display: grid; gap: 0; }
+.hist-body .item { padding: 12px 0; }
+.hist-body .item h3 { font-size: 15.5px; }
+.hist-body .sum, .hist-body .why p { font-size: 14px; }
+.hist-body .oneliner { margin: 2px 0 8px; font-size: 14px; }
+.hist-body .readrow { padding-top: 10px; display: flex; justify-content: flex-end; }
+.gl { padding: 12px 0; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+.gl:first-child { border-top: 0; }
+.gl h3 { font-size: 15px; font-weight: 600; }
+.gl h3 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; font-family: var(--font-mono); }
+.gl p { font-size: 14px; line-height: 1.6; color: var(--fg); }
+
+footer .wrap { padding-block: 0 36px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+footer .wrap p + p { margin-top: 4px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .readbtn { transition: background .15s ease, color .15s ease; }
+}
+@media (min-width: 560px) {
+  .brief { padding: 22px 22px 8px; }
+  .date { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <h1 class="brand">AI 데일리 브리프</h1>
+    <div class="meta" id="meta">불러오는 중</div>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <section id="today" aria-label="오늘의 브리핑">
+      <div class="status"><strong>브리핑을 불러오는 중입니다</strong>매일 아침 6시 45분, AX 기획자가 알아야 할 AI 소식 3~5개가 이곳에 올라옵니다.</div>
+    </section>
+
+    <section id="concept" class="concept" hidden aria-label="오늘의 개념"></section>
+
+    <section id="history" class="history" hidden aria-label="지난 브리핑">
+      <h2 class="section-title">지난 브리핑</h2>
+      <div id="history-list"></div>
+    </section>
+
+    <section id="glossary" class="glossary" hidden aria-label="개념 사전">
+      <h2 class="section-title" id="glossary-title">쌓인 개념 사전</h2>
+      <details>
+        <summary><span>전체 보기</span><span class="sub" id="glossary-count"></span></summary>
+        <div id="glossary-list"></div>
+      </details>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>매일 오전 6:45(한국 시간) GitHub Actions가 자동으로 갱신합니다. 기준: AX 기획자가 꼭 알아야 할 것만, 하루 3~5개.</p>
+    <p id="updated"></p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var todayEl = $('#today'), conceptEl = $('#concept'), histSec = $('#history'), histEl = $('#history-list');
+  var glSec = $('#glossary'), glEl = $('#glossary-list'), glCount = $('#glossary-count');
+  var metaEl = $('#meta'), updatedEl = $('#updated');
+
+  var CATS = {
+    model: '모델·제품', market: '시장·투자', policy: '정책·규제',
+    practice: '도입·실무', tech: '기술·개념', korea: '국내 동향'
+  };
+  var WD = ['일', '월', '화', '수', '목', '금', '토'];
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function parseDate(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+  function longDate(iso) {
+    var d = parseDate(iso); if (!d) return esc(iso);
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + WD[d.getDay()] + '요일';
+  }
+  function midDate(iso) {
+    var d = parseDate(iso); if (!d) return esc(iso);
+    return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + WD[d.getDay()] + ')';
+  }
+  function shortDate(iso) {
+    var d = parseDate(iso); if (!d) return esc(iso);
+    return String(d.getMonth() + 1).padStart(2, '0') + '.' + String(d.getDate()).padStart(2, '0');
+  }
+  function safeUrl(u) {
+    try { var x = new URL(String(u)); return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : ''; }
+    catch (e) { return ''; }
+  }
+
+  // Read-state lives only in this browser (a per-viewer convenience).
+  var readMap = {};
+  try { readMap = JSON.parse(localStorage.getItem('aidb.read') || '{}') || {}; } catch (e) { readMap = {}; }
+  function saveRead() { try { localStorage.setItem('aidb.read', JSON.stringify(readMap)); } catch (e) {} }
+
+  function readBtn(date) {
+    var on = !!readMap[date];
+    return '<button type="button" class="readbtn" data-read="' + esc(date) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+      (on ? '읽음 ✓' : '읽음 표시') + '</button>';
+  }
+
+  function renderItems(items) {
+    if (!Array.isArray(items) || !items.length) return '<div class="item"><p class="sum">이 날은 등록된 항목이 없습니다.</p></div>';
+    return items.map(function (it) {
+      it = it || {};
+      var cat = CATS[it.category] ? it.category : 'tech';
+      var url = safeUrl(it.source_url);
+      var src = [it.source_name, it.source_date].filter(Boolean).map(esc).join(' · ');
+      return '<article class="item">' +
+        '<div class="item-head"><span class="chip ' + cat + '">' + CATS[cat] + '</span>' + (src ? '<span class="src">' + src + '</span>' : '') + '</div>' +
+        '<h3>' + esc(it.title) + '</h3>' +
+        (it.summary ? '<p class="sum">' + esc(it.summary) + '</p>' : '') +
+        (it.why ? '<div class="why"><span class="why-label">기획자 시사점</span><p>' + esc(it.why) + '</p></div>' : '') +
+        (url ? '<a class="link" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">원문 보기</a>' : '') +
+        '</article>';
+    }).join('');
+  }
+
+  function renderToday(b) {
+    var n = Array.isArray(b.items) ? b.items.length : 0;
+    return '<div class="brief">' +
+      '<div class="brief-head"><div><div class="eyebrow">Today · ' + n + ' items</div><h2 class="date">' + longDate(b.date) + '</h2></div>' + readBtn(b.date) + '</div>' +
+      (b.oneliner ? '<p class="oneliner"><b>오늘 한 줄</b>' + esc(b.oneliner) + '</p>' : '') +
+      renderItems(b.items) +
+      '</div>';
+  }
+
+  function renderConcept(c) {
+    if (!c || !c.term) { conceptEl.hidden = true; return; }
+    conceptEl.innerHTML = '<h2 class="section-title">오늘의 개념</h2>' +
+      '<div class="concept-card"><h3>' + esc(c.term) + (c.en ? '<small>' + esc(c.en) + '</small>' : '') + '</h3>' +
+      '<p>' + esc(c.body) + '</p>' + (c.why ? '<p><strong>왜 알아야 하나:</strong> ' + esc(c.why) + '</p>' : '') + '</div>';
+    conceptEl.hidden = false;
+  }
+
+  function renderHistory(rest) {
+    if (!rest.length) { histSec.hidden = true; return; }
+    histEl.innerHTML = rest.map(function (b) {
+      var n = Array.isArray(b.items) ? b.items.length : 0;
+      var done = readMap[b.date] ? ' <span class="done">읽음</span>' : '';
+      return '<details data-date="' + esc(b.date) + '"><summary><span>' + midDate(b.date) + '</span><span class="sub">' + n + '건' + done + '</span></summary>' +
+        '<div class="hist-body">' +
+        (b.oneliner ? '<p class="oneliner"><b>한 줄</b>' + esc(b.oneliner) + '</p>' : '') +
+        renderItems(b.items) +
+        (b.concept && b.concept.term ? '<div class="item"><div class="item-head"><span class="chip tech">그날의 개념</span></div><h3>' + esc(b.concept.term) + '</h3><p class="sum">' + esc(b.concept.body) + '</p></div>' : '') +
+        '<div class="readrow">' + readBtn(b.date) + '</div>' +
+        '</div></details>';
+    }).join('');
+    histSec.hidden = false;
+  }
+
+  function renderGlossary(docs) {
+    var terms = docs.filter(function (b) { return b.concept && b.concept.term; });
+    if (!terms.length) { glSec.hidden = true; return; }
+    glCount.textContent = terms.length + '개';
+    glEl.innerHTML = terms.map(function (b) {
+      return '<div class="gl"><h3>' + esc(b.concept.term) + '<small>' + shortDate(b.date) + '</small></h3><p>' + esc(b.concept.body) + '</p></div>';
+    }).join('');
+    glSec.hidden = false;
+  }
+
+  var docs = [];
+  function render() {
+    if (!docs.length) {
+      todayEl.innerHTML = '<div class="status"><strong>첫 브리핑을 준비하고 있어요</strong>다음 아침 6시 45분에 첫 소식이 올라옵니다.</div>';
+      conceptEl.hidden = true; histSec.hidden = true; glSec.hidden = true;
+      metaEl.textContent = '0일째'; return;
+    }
+    var latest = docs[0], rest = docs.slice(1);
+    todayEl.innerHTML = renderToday(latest);
+    renderConcept(latest.concept);
+    renderHistory(rest);
+    renderGlossary(docs);
+    var readCount = docs.filter(function (b) { return readMap[b.date]; }).length;
+    metaEl.textContent = docs.length + '일째 · 읽음 ' + readCount + '/' + docs.length;
+    var total = docs.reduce(function (a, b) { return a + (Array.isArray(b.items) ? b.items.length : 0); }, 0);
+    var gen = latest.generated_by ? ' 생성 모델 ' + esc(String(latest.generated_by)) + '.' : '';
+    updatedEl.textContent = '지금까지 ' + total + '개 소식, 개념 ' + docs.filter(function (b) { return b.concept && b.concept.term; }).length + '개가 쌓였습니다.' +
+      (latest.generated_at ? ' 마지막 업데이트 ' + esc(String(latest.generated_at).replace('T', ' ').slice(0, 16)) + '.' : '') + gen;
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-read]'); if (!btn) return;
+    var d = btn.getAttribute('data-read');
+    if (readMap[d]) delete readMap[d]; else readMap[d] = Date.now();
+    saveRead();
+    var open = {};
+    histEl.querySelectorAll('details[open]').forEach(function (x) { open[x.getAttribute('data-date')] = true; });
+    render();
+    histEl.querySelectorAll('details').forEach(function (x) { if (open[x.getAttribute('data-date')]) x.open = true; });
+  });
+
+  function setStatus(title, body) {
+    todayEl.innerHTML = '<div class="status"><strong>' + esc(title) + '</strong>' + esc(body) + '</div>';
+  }
+
+  function normalize(payload) {
+    var list = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.briefs) ? payload.briefs : []);
+    list = list.filter(function (b) { return b && b.date; });
+    list.sort(function (a, b) { return String(b.date).localeCompare(String(a.date)); });
+    return list;
+  }
+
+  function load() {
+    fetch('data/index.json?v=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (payload) { docs = normalize(payload); render(); })
+      .catch(function (err) {
+        setStatus('브리핑을 불러오지 못했어요', '네트워크를 확인한 뒤 당겨서 새로고침해 주세요. (' + (err && err.message ? err.message : 'unknown') + ')');
+        metaEl.textContent = '';
+      });
+  }
+  load();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') load(); });
+})();
+</script>
+</body>
+</html>
