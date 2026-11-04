@@ -182,3 +182,45 @@ def test_validate_rejects_aggregators_and_duplicate_domains(mod):
     ]
     assert any("집계" in p for p in problems)
     assert any("중복" in p for p in problems)
+
+
+def test_days_old_handles_formats_and_year_wrap(mod):
+    assert mod.days_old("11.03", "2026-11-04") == 1
+    assert mod.days_old("2026-10-08", "2026-11-04") == 27
+    assert mod.days_old("12.30", "2027-01-02") == 3  # 작년 12월 30일
+    assert mod.days_old("2026", "2026-11-04") is None
+    assert mod.days_old("", "2026-11-04") is None
+
+
+def test_validate_rejects_vague_summaries_and_limits_stale_items(mod):
+    def item(i, cat, url, date, summary="요약 " * 10):
+        it = _item(i, cat, url)
+        it["source_date"] = date
+        it["summary"] = summary
+        return it
+
+    raw = {
+        "items": [
+            item(
+                1,
+                "model",
+                "https://a.com/1",
+                "11.03",
+                "세부 기능과 가격은 원문에서 확인해야 합니다.",
+            ),  # 회피 문구
+            item(2, "policy", "https://b.com/2", "07.01"),  # 오래됨 1개 → 허용
+            item(3, "market", "https://c.com/3", "10.01"),  # 오래됨 2개째 → 제외
+            item(4, "korea", "https://d.com/4", "11.04"),
+            item(5, "tech", "https://e.com/5", "11.02"),
+        ],
+        "concept": {"term": "t", "body": "b"},
+    }
+    brief, problems = mod.validate_brief(raw, "2026-11-04", set())
+    assert brief is not None
+    assert [i["source_url"] for i in brief["items"]] == [
+        "https://b.com/2",
+        "https://d.com/4",
+        "https://e.com/5",
+    ]
+    assert any("회피 문구" in p for p in problems)
+    assert any("지난 소식" in p for p in problems)

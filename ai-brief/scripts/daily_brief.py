@@ -107,6 +107,24 @@ if EFFORT not in ("low", "medium", "high"):
     EFFORT = "medium"
 # 이보다 검색을 적게 하고 쓴 초안은 반려하고 다시 시킨다(품질 가드).
 MIN_SEARCHES = max(0, min(MAX_SEARCHES, int(os.environ.get("BRIEF_MIN_SEARCHES") or 6)))
+# 모델이 검색만 하고 최종 JSON 없이 턴을 끝내면, 같은 대화(검색 결과가 남아 있는 상태)에서 이어서 쓰게 한다.
+CONTINUE_MSG = (
+    "조사한 내용을 바탕으로 지금 바로 최종 결과를 작성하세요. 추가 검색은 꼭 필요할 때만 하고, "
+    "마지막에는 반드시 지정된 구조의 JSON 하나를 ```json 펜스 안에 출력하고 끝내세요. "
+    "질문이나 확인 요청은 하지 마세요."
+)
+MAX_CONTINUATIONS = 2
+# 요약에 이런 회피 문구가 있으면 사실 확인을 안 한 것이므로 그 항목은 버린다.
+VAGUE_PHRASES = (
+    "원문에서 확인",
+    "확인해야 합니다",
+    "확인이 필요합니다",
+    "자세한 내용은",
+    "원문을 참고",
+)
+# 10일 넘게 지난 소식은 '배경' 성격으로 하루 1개까지만 허용한다.
+MAX_STALE_DAYS = 10
+MAX_STALE_ITEMS = 1
 # 뉴스레터·집계·커뮤니티 사이트는 출처로 인정하지 않는다(원문을 찾아 인용해야 함).
 AGGREGATOR_DOMAINS = {
     "theneuron.ai",
@@ -151,7 +169,8 @@ AX 기획자가 '몰라도 되는 것'은 과감히 버리고 3~5개만 고릅�
 
 ## 작성 규칙 (모두 한국어, 존댓말)
 - title: 핵심이 드러나는 제목, 40자 내외, 숫자 포함 권장.
-- summary: 사실 중심 2~4문장, 수치·날짜·주체를 명확히, 150~250자.
+- summary: 사실 중심 2~4문장, 수치·날짜·주체를 명확히, 150~250자. 고른 소식은 web_fetch(또는 확인 검색)로 원문을 읽고 씁니다. '원문에서 확인해야 합니다', '자세한 내용은 …' 같은 회피 문구 금지. 구체적 사실이 없으면 그 소식은 고르지 않습니다.
+- 최근성: 최근 24~48시간 소식이 기본입니다. 10일 넘게 지난 소식은 '배경'으로 하루 1개까지만 허용합니다.
 - why: '기획자 시사점' 2~3문장. 이 소식이 AX 과제 기획·벤더 선택·거버넌스·예산에 어떤 행동 변화를 요구하는지 구체적으로, 120~200자.
 - source_url: 검색 결과에 실제로 있던 URL만 씁니다. 지어내지 않습니다. 가능하면 1차 출처나 주요 매체.
 - concept(오늘의 개념): 이전 브리핑에서 다룬 적 없는 용어 1개. 비전문가도 이해할 비유 1개를 포함한 3~4문장(200~300자)과, 기획자가 알아야 하는 이유 1~2문장(가능하면 오늘 소식과 연결).
@@ -299,6 +318,31 @@ def extract_json(text: str) -> dict | None:
 
 
 # ----------------------------------------------------------------------------- 검증
+def days_old(source_date: str, date: str) -> int | None:
+    """'MM.DD' 또는 'YYYY-MM-DD' 형식의 출처 날짜가 브리핑 날짜보다 며칠 전인지. 모르면 None."""
+    sd = str(source_date or "").strip()
+    try:
+        today = dt.date.fromisoformat(date)
+    except ValueError:
+        return None
+    m = re.fullmatch(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", sd)
+    if m:
+        y, mo, d = (int(x) for x in m.groups())
+    else:
+        m = re.fullmatch(r"(\d{1,2})[.\-/](\d{1,2})", sd)
+        if not m:
+            return None
+        mo, d = (int(x) for x in m.groups())
+        y = today.year
+    try:
+        when = dt.date(y, mo, d)
+    except ValueError:
+        return None
+    if when > today + dt.timedelta(days=7):  # 연말·연초 경계: 작년 날짜
+        when = when.replace(year=when.year - 1)
+    return (today - when).days
+
+
 def validate_brief(
     raw: dict,
     date: str,
@@ -319,6 +363,7 @@ def validate_brief(
     items: list[dict] = []
     per_cat: dict[str, int] = {}
     used_domains: set[str] = set()
+    stale_items = 0
     for i, it in enumerate(items_in, 1):
         if not isinstance(it, dict):
             problems.append(f"item {i}: 객체가 아님")
@@ -359,6 +404,19 @@ def validate_brief(
         if title in recent_titles:
             problems.append(f"item {i}: 이전 브리핑과 제목이 같음")
             continue
+        if any(ph in summary or ph in why for ph in VAGUE_PHRASES):
+            problems.append(
+                f"item {i}: 요약이 구체적이지 않음(회피 문구). 원문을 읽고 수치·날짜를 넣어야 함"
+            )
+            continue
+        age = days_old(str(it.get("source_date", "")), date)
+        if age is not None and age > MAX_STALE_DAYS:
+            if stale_items >= MAX_STALE_ITEMS:
+                problems.append(
+                    f"item {i}: {age}일 지난 소식은 하루 {MAX_STALE_ITEMS}개까지만. 최근 소식으로 교체"
+                )
+                continue
+            stale_items += 1
         if per_cat.get(cat, 0) >= MAX_PER_CATEGORY:
             problems.append(f"item {i}: '{cat}' 카테고리 초과로 제외")
             continue
@@ -467,7 +525,7 @@ def build_user_prompt(date: str, briefs: list[dict], extra: str = "") -> str:
 
 ## 할 일
 1. 위 검색어를 포함해 웹검색을 최소 8회 이상 수행해 최근 24~48시간의 AI 소식을 조사합니다.
-2. 선별 기준에 따라 3~5개를 고르고(항목마다 다른 매체, 집계 사이트 금지), '오늘의 개념' 1개를 정합니다.
+2. 선별 기준에 따라 3~5개를 고르고(항목마다 다른 매체, 집계 사이트 금지, 10일 넘은 소식은 1개까지), 고른 소식마다 원문을 읽어 수치·날짜를 요약에 넣습니다. '오늘의 개념' 1개를 정합니다.
 3. 마지막에 지정된 JSON 하나를 ```json 펜스 안에 출력합니다. "date" 는 "{date}" 로 씁니다.{note}"""
 
 
@@ -538,6 +596,7 @@ def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[
     seen: set[str] = set()
     texts: list[str] = []
     searches = 0
+    continuations = 0
 
     def call(extra: dict):
         with client.beta.messages.stream(
@@ -557,7 +616,7 @@ def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[
         {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"},
         {},
     ]
-    for _ in range(8):  # pause_turn(서버측 도구 반복 한도) 이어가기
+    for _ in range(12):  # pause_turn(서버측 도구 반복 한도) 과 이어쓰기
         last_err: Exception | None = None
         resp = None
         for extra in extras:
@@ -598,8 +657,21 @@ def run_anthropic(model: str, system: str, user: str, use_tools: bool) -> tuple[
         usage = getattr(resp, "usage", None)
         if usage:
             log(
-                f"anthropic usage: in={usage.input_tokens} out={usage.output_tokens} model={resp.model}"
+                f"anthropic usage: in={usage.input_tokens} out={usage.output_tokens} "
+                f"model={resp.model} stop={resp.stop_reason}"
             )
+        if (
+            use_tools
+            and extract_json("\n".join(texts)) is None
+            and continuations < MAX_CONTINUATIONS
+        ):
+            continuations += 1
+            log(
+                f"최종 JSON 없이 턴 종료, 같은 대화에서 이어쓰기 {continuations}/{MAX_CONTINUATIONS}"
+            )
+            messages.append({"role": "assistant", "content": resp.content})
+            messages.append({"role": "user", "content": CONTINUE_MSG})
+            continue
         break
     return "\n".join(texts), seen, searches
 
@@ -608,22 +680,12 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     import openai
 
     client = openai.OpenAI()
-    base = {
-        "model": model,
-        "instructions": system,
-        "input": user,
-        "max_output_tokens": MAX_OUTPUT_TOKENS,
-    }
     tools = (
         [
             {
                 "type": "web_search",
                 "search_context_size": "medium" if EFFORT != "high" else "high",
-                "user_location": {
-                    "type": "approximate",
-                    "country": "KR",
-                    "timezone": "Asia/Seoul",
-                },
+                "user_location": {"type": "approximate", "country": "KR", "timezone": "Asia/Seoul"},
             }
         ]
         if use_tools
@@ -638,42 +700,78 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
         {"tools": tools, "reasoning": {"effort": EFFORT}},
         {"tools": tools},
     ]
-    resp = None
-    last_err: Exception | None = None
-    for extra in variants:
-        try:
-            resp = client.responses.create(**base, **extra)
-            break
-        except openai.NotFoundError as e:
-            raise ModelUnavailable(str(e)) from e
-        except openai.BadRequestError as e:
-            if _looks_like_missing_model(e):
-                raise ModelUnavailable(str(e)) from e
-            last_err = e
-            continue
-    if resp is None:
-        raise RuntimeError(f"OpenAI 요청 실패: {last_err}")
     seen: set[str] = set()
+    texts: list[str] = []
     searches = 0
-    for item in getattr(resp, "output", None) or []:
-        itype = getattr(item, "type", "")
-        if itype == "web_search_call":
-            searches += 1
-            action = getattr(item, "action", None)
-            for s in getattr(action, "sources", None) or []:
-                if getattr(s, "url", None):
-                    seen.add(s.url)
-            if getattr(action, "url", None):
-                seen.add(action.url)
-        elif itype == "message":
-            for c in getattr(item, "content", None) or []:
-                for a in getattr(c, "annotations", None) or []:
-                    if getattr(a, "type", "") == "url_citation" and getattr(a, "url", None):
-                        seen.add(a.url)
-    usage = getattr(resp, "usage", None)
-    if usage:
-        log(f"openai usage: in={usage.input_tokens} out={usage.output_tokens} model={resp.model}")
-    return getattr(resp, "output_text", "") or "", seen, searches
+    continuations = 0
+    chosen: dict | None = None
+    prev_id: str | None = None
+    pending_input = user
+    for _ in range(1 + MAX_CONTINUATIONS):
+        resp = None
+        last_err: Exception | None = None
+        for extra in [chosen] if chosen is not None else variants:
+            kwargs = {
+                "model": model,
+                "instructions": system,
+                "input": pending_input,
+                "max_output_tokens": MAX_OUTPUT_TOKENS,
+                **extra,
+            }
+            if prev_id:
+                kwargs["previous_response_id"] = prev_id
+            try:
+                resp = client.responses.create(**kwargs)
+                chosen = extra
+                break
+            except openai.NotFoundError as e:
+                raise ModelUnavailable(str(e)) from e
+            except openai.BadRequestError as e:
+                if _looks_like_missing_model(e):
+                    raise ModelUnavailable(str(e)) from e
+                last_err = e
+                continue
+        if resp is None:
+            raise RuntimeError(f"OpenAI 요청 실패: {last_err}")
+        parts: list[str] = []
+        for item in getattr(resp, "output", None) or []:
+            itype = getattr(item, "type", "")
+            if itype == "web_search_call":
+                searches += 1
+                action = getattr(item, "action", None)
+                for src in getattr(action, "sources", None) or []:
+                    if getattr(src, "url", None):
+                        seen.add(src.url)
+                if getattr(action, "url", None):
+                    seen.add(action.url)
+            elif itype == "message":
+                for c in getattr(item, "content", None) or []:
+                    if getattr(c, "text", None):
+                        parts.append(c.text)
+                    for a in getattr(c, "annotations", None) or []:
+                        if getattr(a, "type", "") == "url_citation" and getattr(a, "url", None):
+                            seen.add(a.url)
+        texts.append(getattr(resp, "output_text", None) or "\n".join(parts))
+        usage = getattr(resp, "usage", None)
+        if usage:
+            log(
+                f"openai usage: in={usage.input_tokens} out={usage.output_tokens} model={resp.model}"
+            )
+        prev_id = getattr(resp, "id", None)
+        if (
+            use_tools
+            and prev_id
+            and extract_json("\n".join(texts)) is None
+            and continuations < MAX_CONTINUATIONS
+        ):
+            continuations += 1
+            log(
+                f"최종 JSON 없이 응답 종료, 같은 대화에서 이어쓰기 {continuations}/{MAX_CONTINUATIONS}"
+            )
+            pending_input = CONTINUE_MSG
+            continue
+        break
+    return "\n".join(texts), seen, searches
 
 
 def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
@@ -687,45 +785,64 @@ def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str
         {"thinking_config": types.ThinkingConfig(thinking_budget=-1)},
         {},
     ]
-    resp = None
-    last_err: Exception | None = None
-    for extra in variants:
-        cfg = types.GenerateContentConfig(
-            system_instruction=system,
-            tools=tools,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
-            **extra,
-        )
-        try:
-            resp = client.models.generate_content(model=model, contents=user, config=cfg)
-            break
-        except errors.ClientError as e:
-            if _looks_like_missing_model(e):
-                raise ModelUnavailable(str(e)) from e
-            last_err = e
-            continue
-    if resp is None:
-        raise RuntimeError(f"Gemini 요청 실패: {last_err}")
+    contents = [types.Content(role="user", parts=[types.Part(text=user)])]
     seen: set[str] = set()
+    texts: list[str] = []
     searches = 0
-    for cand in getattr(resp, "candidates", None) or []:
-        gm = getattr(cand, "grounding_metadata", None)
-        searches += len(getattr(gm, "web_search_queries", None) or [])
-        for ch in getattr(gm, "grounding_chunks", None) or []:
-            web = getattr(ch, "web", None)
-            if not web:
+    continuations = 0
+    chosen: dict | None = None
+    for _ in range(1 + MAX_CONTINUATIONS):
+        resp = None
+        last_err: Exception | None = None
+        for extra in [chosen] if chosen is not None else variants:
+            cfg = types.GenerateContentConfig(
+                system_instruction=system, tools=tools, max_output_tokens=MAX_OUTPUT_TOKENS, **extra
+            )
+            try:
+                resp = client.models.generate_content(model=model, contents=contents, config=cfg)
+                chosen = extra
+                break
+            except errors.ClientError as e:
+                if _looks_like_missing_model(e):
+                    raise ModelUnavailable(str(e)) from e
+                last_err = e
                 continue
-            if getattr(web, "uri", None):
-                seen.add(web.uri)
-            if getattr(web, "domain", None):
-                seen.add(f"https://{web.domain}/")
-    usage = getattr(resp, "usage_metadata", None)
-    if usage:
-        log(
-            f"gemini usage: in={getattr(usage, 'prompt_token_count', '?')} "
-            f"out={getattr(usage, 'candidates_token_count', '?')} model={model}"
-        )
-    return getattr(resp, "text", None) or "", seen, searches
+        if resp is None:
+            raise RuntimeError(f"Gemini 요청 실패: {last_err}")
+        for cand in getattr(resp, "candidates", None) or []:
+            gm = getattr(cand, "grounding_metadata", None)
+            searches += len(getattr(gm, "web_search_queries", None) or [])
+            for ch in getattr(gm, "grounding_chunks", None) or []:
+                web = getattr(ch, "web", None)
+                if not web:
+                    continue
+                if getattr(web, "uri", None):
+                    seen.add(web.uri)
+                if getattr(web, "domain", None):
+                    seen.add(f"https://{web.domain}/")
+        texts.append(getattr(resp, "text", None) or "")
+        usage = getattr(resp, "usage_metadata", None)
+        if usage:
+            log(
+                f"gemini usage: in={getattr(usage, 'prompt_token_count', '?')} "
+                f"out={getattr(usage, 'candidates_token_count', '?')} model={model}"
+            )
+        if (
+            use_tools
+            and extract_json("\n".join(texts)) is None
+            and continuations < MAX_CONTINUATIONS
+        ):
+            continuations += 1
+            log(
+                f"최종 JSON 없이 응답 종료, 같은 대화에서 이어쓰기 {continuations}/{MAX_CONTINUATIONS}"
+            )
+            cand0 = (getattr(resp, "candidates", None) or [None])[0]
+            if cand0 is not None and getattr(cand0, "content", None):
+                contents.append(cand0.content)
+            contents.append(types.Content(role="user", parts=[types.Part(text=CONTINUE_MSG)]))
+            continue
+        break
+    return "\n".join(texts), seen, searches
 
 
 RUNNERS: dict[str, Callable[[str, str, str, bool], tuple[str, set[str], int]]] = {
