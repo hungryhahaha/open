@@ -298,3 +298,40 @@ def test_rank_gemini_models_prefers_flash_alias_and_newest(mod):
         x not in ranked for x in ("gemini-3-flash-lite", "gemini-embedding-001", "gemma-4-27b-it")
     )
     assert "gemini-3-pro-image-preview" not in ranked
+
+
+class _FakeQuotaError(Exception):
+    def __init__(self, details):
+        super().__init__("429 RESOURCE_EXHAUSTED")
+        self.code = 429
+        self.details = details
+
+
+def _quota_details(quota_id, value, delay="37s"):
+    return {
+        "error": {
+            "code": 429,
+            "status": "RESOURCE_EXHAUSTED",
+            "details": [
+                {
+                    "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": quota_id, "quotaValue": value}],
+                },
+                {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": delay},
+            ],
+        }
+    }
+
+
+def test_gemini_quota_info_distinguishes_minute_and_zero_limits(mod):
+    summary, delay, per_minute = mod.gemini_quota_info(
+        _FakeQuotaError(
+            _quota_details("GenerateRequestsPerMinutePerProjectPerModel-FreeTier", "10")
+        )
+    )
+    assert per_minute is True and delay == 37.0 and "PerMinute" in summary
+
+    _, _, per_minute = mod.gemini_quota_info(
+        _FakeQuotaError(_quota_details("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "0"))
+    )
+    assert per_minute is False

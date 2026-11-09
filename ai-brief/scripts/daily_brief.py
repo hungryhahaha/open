@@ -849,6 +849,40 @@ def discover_gemini_models() -> list[str]:
     return _GEMINI_DISCOVERED
 
 
+def gemini_quota_info(err: Exception) -> tuple[str, float | None, bool]:
+    """429 RESOURCE_EXHAUSTED 오류에서 (요약, 재시도 대기 초, 분당 한도 여부)를 뽑는다."""
+    details = getattr(err, "details", None)
+    text = json.dumps(details, ensure_ascii=False) if details else str(err)
+    ids = re.findall(r'"quotaId":\s*"([^"]+)"', text)
+    vals = re.findall(r'"quotaValue":\s*"?(\d+)', text)
+    delay_m = re.search(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"', text)
+    delay = float(delay_m.group(1)) if delay_m else None
+    pairs = [f"{q}={v}" for q, v in zip(ids, vals, strict=False)] or ids
+    summary = ", ".join(pairs[:3]) or "한도 정보 없음"
+    per_minute = bool(ids) and all("PerMinute" in q for q in ids) and "0" not in vals
+    return summary, delay, per_minute
+
+
+def _gemini_generate(client, model: str, contents, cfg):
+    """generate_content 호출. 분당 한도 초과면 한 번 기다렸다 재시도하고,
+    하루 한도·무료 등급 미제공(한도 0) 같은 모델 단위 한도면 다음 후보 모델로 넘긴다."""
+    from google.genai import errors
+
+    for attempt in range(2):
+        try:
+            return client.models.generate_content(model=model, contents=contents, config=cfg)
+        except errors.ClientError as e:
+            if getattr(e, "code", None) != 429:
+                raise
+            summary, delay, per_minute = gemini_quota_info(e)
+            if attempt == 0 and per_minute and delay is not None and delay <= 70:
+                log(f"{model} 분당 한도 초과({summary}), {delay:.0f}초 후 재시도")
+                time.sleep(delay + 2)
+                continue
+            raise ModelUnavailable(f"429 사용 한도 초과 ({summary})") from e
+    raise ModelUnavailable("429 사용 한도 초과")
+
+
 def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
     from google.genai import errors, types
 
@@ -873,7 +907,7 @@ def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str
                 system_instruction=system, tools=tools, max_output_tokens=MAX_OUTPUT_TOKENS, **extra
             )
             try:
-                resp = client.models.generate_content(model=model, contents=contents, config=cfg)
+                resp = _gemini_generate(client, model, contents, cfg)
                 chosen = extra
                 break
             except errors.ClientError as e:
@@ -979,7 +1013,7 @@ def model_candidates(provider: str) -> list[str]:
     if provider == "gemini":
         found = discover_gemini_models()
         if found:
-            return found[:5]
+            return found[:8]
     return list(MODEL_CHAINS[provider])
 
 
