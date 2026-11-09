@@ -858,7 +858,10 @@ def gemini_quota_info(err: Exception) -> tuple[str, float | None, bool]:
     delay_m = re.search(r'"retryDelay":\s*"(\d+(?:\.\d+)?)s"', text)
     delay = float(delay_m.group(1)) if delay_m else None
     pairs = [f"{q}={v}" for q, v in zip(ids, vals, strict=False)] or ids
-    summary = ", ".join(pairs[:3]) or "한도 정보 없음"
+    summary = ", ".join(pairs[:3])
+    if not summary:
+        msg = str(getattr(err, "message", "") or err)
+        summary = re.sub(r"\s+", " ", msg)[:220] or "한도 정보 없음"
     per_minute = bool(ids) and all("PerMinute" in q for q in ids) and "0" not in vals
     return summary, delay, per_minute
 
