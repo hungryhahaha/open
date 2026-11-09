@@ -111,6 +111,13 @@ if EFFORT not in EFFORT_LEVELS:
 EFFORT_3 = {"xhigh": "high", "max": "high"}.get(EFFORT, EFFORT)
 # 이보다 검색을 적게 하고 쓴 초안은 반려하고 다시 시킨다(품질 가드).
 MIN_SEARCHES = max(0, min(MAX_SEARCHES, int(os.environ.get("BRIEF_MIN_SEARCHES") or 6)))
+# Gemini 의 Google 검색 그라운딩은 질의 하나에 여러 결과를 묶어 오므로, 따로 지정하지 않았으면 기준을 낮춘다.
+MIN_SEARCHES_BY_PROVIDER = (
+    {} if os.environ.get("BRIEF_MIN_SEARCHES") else {"gemini": min(MIN_SEARCHES, 3)}
+)
+# Gemini 그라운딩이 돌려주는 임시 리디렉트 링크. 출처 URL 로는 쓰지 않는다(시간이 지나면 깨짐).
+REDIRECT_MARKERS = ("vertexaisearch.cloud.google.com", "grounding-api-redirect")
+DOMAIN_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9-]+\.)+[a-z]{2,}$")
 # 모델이 검색만 하고 최종 JSON 없이 턴을 끝내면, 같은 대화(검색 결과가 남아 있는 상태)에서 이어서 쓰게 한다.
 CONTINUE_MSG = (
     "조사한 내용을 바탕으로 지금 바로 최종 결과를 작성하세요. 추가 검색은 꼭 필요할 때만 하고, "
@@ -396,6 +403,9 @@ def validate_brief(
         if seen_norm and url not in seen_norm and registered_domain(url) not in seen_domains:
             problems.append(f"item {i}: source_url 이 검색 결과에 없음 ({url})")
             continue
+        if any(m in url for m in REDIRECT_MARKERS):
+            problems.append(f"item {i}: 검색 리디렉트 링크는 출처로 쓸 수 없음, 기사 원문 URL 필요")
+            continue
         dom = registered_domain(url)
         if dom in AGGREGATOR_DOMAINS:
             problems.append(
@@ -537,7 +547,9 @@ def build_repair_prompt(
     draft_text: str, problems: list[str], seen_urls: set[str], date: str
 ) -> str:
     urls = (
-        "\n".join(sorted(u for u in seen_urls if u)[:120])
+        "\n".join(
+            sorted(u for u in seen_urls if u and not any(m in u for m in REDIRECT_MARKERS))[:120]
+        )
         or "(목록 없음: 초안에 있는 URL 을 그대로 유지)"
     )
     return f"""아래 '초안'은 방금 생성된 브리핑이고, '검증 오류'는 형식 검사에서 걸린 내용입니다.
@@ -824,6 +836,10 @@ def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str
                     seen.add(web.uri)
                 if getattr(web, "domain", None):
                     seen.add(f"https://{web.domain}/")
+                # Gemini API 는 domain 대신 title 에 출처 도메인(예: reuters.com)을 넣어 주는 경우가 많다.
+                title = str(getattr(web, "title", "") or "").strip().lower()
+                if DOMAIN_RE.match(title):
+                    seen.add(f"https://{title}/")
         texts.append(getattr(resp, "text", None) or "")
         usage = getattr(resp, "usage_metadata", None)
         if usage:
@@ -856,20 +872,42 @@ RUNNERS: dict[str, Callable[[str, str, str, bool], tuple[str, set[str], int]]] =
 }
 
 
-def pick_provider(explicit: str | None) -> str:
+def provider_order(explicit: str | None) -> list[str]:
+    """시도할 제공자 순서. 지정한 제공자를 맨 앞에, 그다음 키가 있는 나머지를 기본 순서대로 둔다.
+    앞 제공자가 실패하면(크레딧 소진, 키 오류, 장애 등) 다음 제공자로 넘어간다."""
     if explicit:
+        explicit = explicit.strip().lower()
         if explicit not in RUNNERS:
             raise SystemExit(f"알 수 없는 제공자: {explicit} (anthropic | openai | gemini)")
         if not os.environ.get(KEY_ENV[explicit]):
             raise SystemExit(f"{KEY_ENV[explicit]} 가 비어 있습니다.")
-        return explicit
-    for p in PROVIDER_ORDER:
-        if os.environ.get(KEY_ENV[p]):
-            return p
-    raise SystemExit(
-        "API 키가 없습니다. ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY 중 하나를 "
-        "ai-brief/.env (gitignore 대상) 또는 GitHub Secrets 에 설정하세요."
-    )
+    order = [p for p in PROVIDER_ORDER if os.environ.get(KEY_ENV[p])]
+    if explicit:
+        order = [explicit] + [p for p in order if p != explicit]
+    if not order:
+        raise SystemExit(
+            "API 키가 없습니다. ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY 중 하나를 "
+            "ai-brief/.env (gitignore 대상) 또는 GitHub Secrets 에 설정하세요."
+        )
+    return order
+
+
+def pick_provider(explicit: str | None) -> str:
+    return provider_order(explicit)[0]
+
+
+def generate_with_fallback(providers: list[str], date: str, briefs: list[dict]) -> dict:
+    failures: list[str] = []
+    for n, provider in enumerate(providers, 1):
+        log(f"제공자: {provider} ({n}/{len(providers)})")
+        try:
+            return generate(provider, date, briefs)
+        except Exception as e:  # noqa: BLE001 - 어떤 이유든 다음 제공자로 넘긴다
+            msg = re.sub(r"\s+", " ", str(e))[:300]
+            failures.append(f"{provider}: {msg}")
+            if n < len(providers):
+                log(f"{provider} 실패, 다음 제공자로 전환: {msg}")
+    raise SystemExit("모든 제공자가 실패했습니다.\n" + "\n".join(failures))
 
 
 def model_candidates(provider: str) -> list[str]:
@@ -912,15 +950,16 @@ def generate(provider: str, date: str, briefs: list[dict], attempts: int = 3) ->
             provider, SYSTEM_PROMPT, user, use_tools=True
         )
         log(f"웹검색 {searches}회, 확인된 URL {len(seen)}개, 응답 {len(text)}자")
-        if searches < MIN_SEARCHES:
-            last_problems = [f"웹검색이 {searches}회뿐 (최소 {MIN_SEARCHES}회)"]
+        min_searches = MIN_SEARCHES_BY_PROVIDER.get(provider, MIN_SEARCHES)
+        if searches < min_searches:
+            last_problems = [f"웹검색이 {searches}회뿐 (최소 {min_searches}회)"]
             log("이번 시도 반려: " + last_problems[0])
             user = build_user_prompt(
                 date,
                 briefs,
                 extra=(
                     f"이전 시도는 웹검색이 {searches}회에 그쳐 반려되었습니다. "
-                    f"이번에는 추천 검색어를 각각 실제로 검색해 최소 {max(MIN_SEARCHES, 8)}회 이상 "
+                    f"이번에는 추천 검색어를 각각 실제로 검색해 최소 {max(min_searches, 8)}회 이상 "
                     "검색한 뒤에만 작성하세요."
                 ),
             )
@@ -1044,9 +1083,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.mock:
         brief = mock_brief(date)
     else:
-        provider = pick_provider(args.provider or os.environ.get("BRIEF_PROVIDER") or None)
-        log(f"제공자: {provider}")
-        brief = generate(provider, date, briefs)
+        providers = provider_order(args.provider or os.environ.get("BRIEF_PROVIDER") or None)
+        brief = generate_with_fallback(providers, date, briefs)
 
     path = save_brief(data_dir, brief)
     build_index(data_dir)

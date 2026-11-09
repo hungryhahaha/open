@@ -228,3 +228,51 @@ def test_validate_rejects_vague_summaries_and_limits_stale_items(mod):
     ]
     assert any("회피 문구" in p for p in problems)
     assert any("지난 소식" in p for p in problems)
+
+
+def test_provider_order_and_fallback(mod, monkeypatch):
+    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
+    monkeypatch.setenv("GEMINI_API_KEY", "g")
+    assert mod.provider_order(None) == ["anthropic", "gemini"]
+    assert mod.provider_order("gemini") == ["gemini", "anthropic"]
+
+    calls = []
+
+    def fake_generate(provider, date, briefs):
+        calls.append(provider)
+        if provider == "anthropic":
+            raise RuntimeError("Error code: 400 - credit balance is too low")
+        return {"date": date, "items": [], "generated_by": provider}
+
+    monkeypatch.setattr(mod, "generate", fake_generate)
+    brief = mod.generate_with_fallback(["anthropic", "gemini"], "2026-11-09", [])
+    assert calls == ["anthropic", "gemini"]
+    assert brief["generated_by"] == "gemini"
+
+    def always_fail(provider, date, briefs):
+        raise RuntimeError(f"{provider} down")
+
+    monkeypatch.setattr(mod, "generate", always_fail)
+    with pytest.raises(SystemExit) as exc:
+        mod.generate_with_fallback(["anthropic", "gemini"], "2026-11-09", [])
+    assert "anthropic down" in str(exc.value) and "gemini down" in str(exc.value)
+
+
+def test_validate_rejects_grounding_redirect_links(mod):
+    redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbC123"
+    raw = {
+        "items": [
+            _item(1, "model", redirect),
+            _item(2, "policy", "https://reuters.com/a"),
+            _item(3, "korea", "https://yna.co.kr/b"),
+            _item(4, "market", "https://fortune.com/c"),
+        ],
+        "concept": {"term": "t", "body": "b"},
+    }
+    seen = {redirect, "https://reuters.com/", "https://yna.co.kr/", "https://fortune.com/"}
+    brief, problems = mod.validate_brief(raw, "2026-11-09", seen)
+    assert brief is not None
+    assert all("vertexaisearch" not in i["source_url"] for i in brief["items"])
+    assert any("리디렉트" in p for p in problems)
