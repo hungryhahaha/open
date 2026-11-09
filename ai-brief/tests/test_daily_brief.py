@@ -276,3 +276,25 @@ def test_validate_rejects_grounding_redirect_links(mod):
     assert brief is not None
     assert all("vertexaisearch" not in i["source_url"] for i in brief["items"])
     assert any("리디렉트" in p for p in problems)
+
+
+def test_rank_gemini_models_prefers_flash_alias_and_newest(mod):
+    names = [
+        "gemini-2.5-pro",
+        "gemini-3.1-pro-preview",
+        "gemini-pro-latest",
+        "gemini-3-flash-preview",
+        "gemini-3.5-flash",
+        "gemini-flash-latest",
+        "gemini-3-flash-lite",
+        "gemini-embedding-001",
+        "gemini-3-pro-image-preview",
+        "gemma-4-27b-it",
+    ]
+    ranked = mod.rank_gemini_models(names)
+    assert ranked[:3] == ["gemini-flash-latest", "gemini-3.5-flash", "gemini-3-flash-preview"]
+    assert ranked[3] == "gemini-pro-latest"
+    assert all(
+        x not in ranked for x in ("gemini-3-flash-lite", "gemini-embedding-001", "gemma-4-27b-it")
+    )
+    assert "gemini-3-pro-image-preview" not in ranked

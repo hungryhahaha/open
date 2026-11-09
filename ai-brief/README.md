@@ -29,7 +29,7 @@ ai-brief/
    |---|---|---|
    | `ANTHROPIC_API_KEY` | Claude | `claude-sonnet-5-5` → `claude-opus-5-5` → `claude-sonnet-4-6` |
    | `OPENAI_API_KEY` | GPT | `gpt-6.1-terra` → `gpt-6.1-sol` → `gpt-5.6-sol` → `gpt-5.5` |
-   | `GEMINI_API_KEY` | Gemini | `gemini-3-flash-preview` → `gemini-2.5-flash` → `gemini-3.1-pro-preview` → `gemini-2.5-pro` |
+   | `GEMINI_API_KEY` | Gemini | 실행할 때 이 키로 쓸 수 있는 모델 목록을 조회해 Flash 계열 최신(`gemini-flash-latest` 등)을 먼저 씀 |
 
    **키는 코드·워크플로 파일·커밋에 절대 넣지 않습니다.** GitHub Secrets 는 암호화되어 저장되고 실행 로그에서도 마스킹됩니다. 로컬에서 돌릴 때는 `ai-brief/.env`(`.gitignore` 대상)에만 둡니다(아래 4번).
 

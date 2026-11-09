@@ -94,10 +94,10 @@ MODEL_CHAINS = {
     "anthropic": ["claude-sonnet-5-5", "claude-opus-5-5", "claude-sonnet-4-6"],
     "openai": ["gpt-6.1-terra", "gpt-6.1-sol", "gpt-5.6-sol", "gpt-5.5"],
     "gemini": [
+        "gemini-flash-latest",
         "gemini-3-flash-preview",
-        "gemini-2.5-flash",
+        "gemini-pro-latest",
         "gemini-3.1-pro-preview",
-        "gemini-2.5-pro",
     ],
 }
 MAX_OUTPUT_TOKENS = 24000
@@ -790,11 +790,68 @@ def run_openai(model: str, system: str, user: str, use_tools: bool) -> tuple[str
     return "\n".join(texts), seen, searches
 
 
-def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
+GEMINI_API_VERSION = "v1beta"  # 프리뷰·별칭 모델과 Google 검색 그라운딩이 모두 있는 버전
+_GEMINI_DISCOVERED: list[str] | None = None
+
+
+def gemini_client():
     from google import genai
+    from google.genai import types
+
+    return genai.Client(
+        api_key=os.environ["GEMINI_API_KEY"],
+        http_options=types.HttpOptions(api_version=GEMINI_API_VERSION),
+    )
+
+
+def rank_gemini_models(names: list[str]) -> list[str]:
+    """쓸 수 있는 Gemini 모델 이름을 '절약형 기본값' 기준으로 정렬한다.
+    Flash 우선(비용), 같은 등급에서는 *-latest 별칭 → 최신 버전 → 정식판 → 프리뷰 순."""
+    skip = (
+        "embedding", "image", "tts", "audio", "live", "native", "robotics", "computer",
+        "lite", "exp", "learnlm", "gemma", "aqa", "veo", "imagen", "nano", "thinking",
+    )  # fmt: skip
+    cands = [n for n in names if n.startswith("gemini-") and not any(x in n for x in skip)]
+    cands = [n for n in cands if "flash" in n or "pro" in n]
+
+    def key(n: str):
+        tier = 0 if "flash" in n else 1
+        alias = 0 if n.endswith("-latest") else 1
+        mv = re.match(r"gemini-(\d+(?:\.\d+)?)", n)
+        ver = float(mv.group(1)) if mv else 0.0
+        return (tier, alias, -ver, "preview" in n, len(n), n)
+
+    return sorted(dict.fromkeys(cands), key=key)
+
+
+def discover_gemini_models() -> list[str]:
+    """이 키로 실제 호출할 수 있는 모델 목록을 API 에서 받아 정렬한다. 실패하면 빈 목록."""
+    global _GEMINI_DISCOVERED
+    if _GEMINI_DISCOVERED is not None:
+        return _GEMINI_DISCOVERED
+    names: list[str] = []
+    try:
+        for model in gemini_client().models.list(config={"page_size": 200}):
+            name = str(getattr(model, "name", "") or "").split("/")[-1]
+            actions = getattr(model, "supported_actions", None)
+            if actions is not None and "generateContent" not in actions:
+                continue
+            names.append(name)
+    except Exception as e:  # noqa: BLE001 - 목록을 못 받으면 고정 후보로 진행
+        log(f"Gemini 모델 목록 조회 실패, 고정 후보 사용: {str(e)[:200]}")
+        _GEMINI_DISCOVERED = []
+        return _GEMINI_DISCOVERED
+    _GEMINI_DISCOVERED = rank_gemini_models(names)
+    log(
+        f"Gemini 사용 가능 모델 {len(names)}개 중 후보: {', '.join(_GEMINI_DISCOVERED[:6]) or '(없음)'}"
+    )
+    return _GEMINI_DISCOVERED
+
+
+def run_gemini(model: str, system: str, user: str, use_tools: bool) -> tuple[str, set[str], int]:
     from google.genai import errors, types
 
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    client = gemini_client()
     tools = [types.Tool(google_search=types.GoogleSearch())] if use_tools else []
     variants = [
         {"thinking_config": types.ThinkingConfig(thinking_level=EFFORT_3)},
@@ -918,6 +975,10 @@ def model_candidates(provider: str) -> list[str]:
     )
     if forced:
         return [m.strip() for m in forced.split(",") if m.strip()]
+    if provider == "gemini":
+        found = discover_gemini_models()
+        if found:
+            return found[:5]
     return list(MODEL_CHAINS[provider])
 
 
@@ -932,8 +993,8 @@ def run_with_model_chain(
             text, seen, searches = runner(model, system, user, use_tools)
             return text, seen, searches, model
         except ModelUnavailable as e:
-            errors.append(f"{model}: {str(e)[:160]}")
-            log(f"{provider}/{model} 사용 불가, 다음 후보로: {str(e)[:160]}")
+            errors.append(f"{model}: {str(e)[:300]}")
+            log(f"{provider}/{model} 사용 불가, 다음 후보로: {str(e)[:300]}")
     raise RuntimeError(f"{provider}: 쓸 수 있는 모델이 없습니다.\n" + "\n".join(errors))
 
 
