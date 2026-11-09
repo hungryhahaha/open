@@ -831,7 +831,8 @@ def discover_gemini_models() -> list[str]:
         return _GEMINI_DISCOVERED
     names: list[str] = []
     try:
-        for model in gemini_client().models.list(config={"page_size": 200}):
+        client = gemini_client()  # 참조를 유지해야 목록을 다 받기 전에 연결이 닫히지 않는다
+        for model in client.models.list(config={"page_size": 200}):
             name = str(getattr(model, "name", "") or "").split("/")[-1]
             actions = getattr(model, "supported_actions", None)
             if actions is not None and "generateContent" not in actions:
