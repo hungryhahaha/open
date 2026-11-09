@@ -806,17 +806,18 @@ GEMINI_API_VERSION = "v1beta"  # 프리뷰·별칭 모델과 Google 검색 그�
 _GEMINI_DISCOVERED: list[str] | None = None
 
 
-def gemini_client():
+def gemini_client(timeout_ms: int = 150_000):
     from google import genai
     from google.genai import types
 
     return genai.Client(
         api_key=os.environ["GEMINI_API_KEY"],
-        # 과부하인 모델에서 오래 붙잡히지 않도록 요청당 3분 제한, SDK 자체 재시도는 1회만.
+        # 과부하인 모델에서 오래 붙잡히지 않도록 요청 시간 제한을 두고, SDK 자체 재시도는 끈다
+        # (재시도·다음 모델 전환은 _gemini_generate 가 맡는다).
         http_options=types.HttpOptions(
             api_version=GEMINI_API_VERSION,
-            timeout=180_000,
-            retry_options=types.HttpRetryOptions(attempts=2),
+            timeout=timeout_ms,
+            retry_options=types.HttpRetryOptions(attempts=1),
         ),
     )
 
@@ -859,11 +860,33 @@ def discover_gemini_models() -> list[str]:
         log(f"Gemini 모델 목록 조회 실패, 고정 후보 사용: {str(e)[:200]}")
         _GEMINI_DISCOVERED = []
         return _GEMINI_DISCOVERED
-    _GEMINI_DISCOVERED = rank_gemini_models(names)
-    log(
-        f"Gemini 사용 가능 모델 {len(names)}개 중 후보: {', '.join(_GEMINI_DISCOVERED[:6]) or '(없음)'}"
-    )
+    ranked = rank_gemini_models(names)
+    log(f"Gemini 사용 가능 모델 {len(names)}개 중 후보: {', '.join(ranked[:6]) or '(없음)'}")
+    _GEMINI_DISCOVERED = probe_gemini_models(ranked)
     return _GEMINI_DISCOVERED
+
+
+def probe_gemini_models(ranked: list[str], limit: int = 6) -> list[str]:
+    """앞쪽 후보에 아주 짧은 요청을 보내, 지금 바로 응답하는 모델을 앞으로 보낸다.
+    과부하(503)나 응답 지연인 모델에 몇 분씩 붙잡히는 것을 막는다. 순서(품질 우선순위)는 유지한다."""
+    from google.genai import types
+
+    client = gemini_client(timeout_ms=25_000)
+    cfg = types.GenerateContentConfig(max_output_tokens=16)
+    healthy: list[str] = []
+    for name in ranked[:limit]:
+        t0 = time.time()
+        try:
+            client.models.generate_content(model=name, contents="Reply with OK.", config=cfg)
+            healthy.append(name)
+            log(f"Gemini 상태 확인 {name}: 정상 ({time.time() - t0:.1f}s)")
+        except Exception as e:  # noqa: BLE001 - 상태 확인 실패는 순서만 뒤로 미룬다
+            code = getattr(e, "code", None) or type(e).__name__
+            log(f"Gemini 상태 확인 {name}: 응답 없음 ({code}, {time.time() - t0:.1f}s)")
+        if len(healthy) >= 3:
+            break
+    rest = [n for n in ranked if n not in healthy]
+    return healthy + rest
 
 
 def gemini_quota_info(err: Exception) -> tuple[str, float | None, bool]:
@@ -908,11 +931,7 @@ def _gemini_generate(client, model: str, contents, cfg):
             raise ModelUnavailable(f"429 사용 한도 초과 ({summary})") from e
         except errors.APIError:
             raise
-        except Exception as e:  # noqa: BLE001 - 연결 끊김·타임아웃 등 전송 오류는 일시 오류로 본다
-            if attempt == 0:
-                log(f"{model} 연결 오류({type(e).__name__}), 5초 후 재시도")
-                time.sleep(5)
-                continue
+        except Exception as e:  # noqa: BLE001 - 연결 끊김·시간 초과는 기다리지 않고 다음 모델로
             raise ModelUnavailable(f"연결 오류: {type(e).__name__}: {str(e)[:120]}") from e
     raise ModelUnavailable("429 사용 한도 초과")
 

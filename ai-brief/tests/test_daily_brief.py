@@ -433,3 +433,19 @@ def test_feeds_system_prompt_drops_search_instructions(mod):
     assert "웹검색 도구를 최소" not in mod.FEEDS_SYSTEM_PROMPT
     assert "RSS 모드" in mod.FEEDS_SYSTEM_PROMPT
     assert "## 선별 기준" in mod.FEEDS_SYSTEM_PROMPT and "## 출력 형식" in mod.FEEDS_SYSTEM_PROMPT
+
+
+def test_probe_puts_responsive_models_first(mod, monkeypatch):
+    class FakeModels:
+        def generate_content(self, model, contents, config):
+            if model == "slow-model":
+                raise TimeoutError("timed out")
+            return object()
+
+    class FakeClient:
+        models = FakeModels()
+
+    monkeypatch.setattr(mod, "gemini_client", lambda timeout_ms=0: FakeClient())
+    order = mod.probe_gemini_models(["slow-model", "fast-a", "fast-b", "fast-c", "fast-d"])
+    assert order[:3] == ["fast-a", "fast-b", "fast-c"]
+    assert order[-1] == "slow-model" or "slow-model" in order[3:]
