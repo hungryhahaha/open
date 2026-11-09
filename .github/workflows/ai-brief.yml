@@ -24,6 +24,10 @@ on:
         description: "이번 실행만 쓸 검색 상한 4~20. 비우면 기본값(10)"
         required: false
         default: ""
+      research:
+        description: "조사 방식 auto|search|feeds. 비우면 auto (웹검색 실패 시 RSS)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -67,6 +71,7 @@ jobs:
           BRIEF_MAX_SEARCHES: ${{ inputs.max_searches || vars.BRIEF_MAX_SEARCHES }}
           BRIEF_EFFORT: ${{ inputs.effort || vars.BRIEF_EFFORT }}
           BRIEF_MIN_SEARCHES: ${{ vars.BRIEF_MIN_SEARCHES }}
+          BRIEF_RESEARCH: ${{ inputs.research || vars.BRIEF_RESEARCH }}
           BRIEF_DATE: ${{ inputs.date }}
         run: |
           if [ -n "$BRIEF_DATE" ]; then

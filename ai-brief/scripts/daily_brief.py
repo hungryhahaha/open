@@ -17,6 +17,7 @@ ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY 중 **하나만** 있으면 
   ANTHROPIC_MODEL / OPENAI_MODEL / GEMINI_MODEL  모델 ID 강제 지정(비우면 기본 후보를 차례로 시도)
   BRIEF_MAX_SEARCHES  검색 호출 상한 (기본 10, 4~20)
   BRIEF_MIN_SEARCHES  이보다 검색을 적게 한 초안은 반려하고 재시도 (기본 6)
+  BRIEF_RESEARCH      auto | search | feeds (기본 auto: 웹검색이 모두 실패하면 주요 매체 RSS 로 작성)
   BRIEF_EFFORT        추론 강도 low | medium | high | xhigh | max (기본 medium; xhigh/max 는 Claude 전용, 다른 제공자는 high 로 취급)
   BRIEF_MODEL         제공자와 무관하게 모델 지정. 쉼표로 여러 개면 순서대로 시도 (예: claude-fable-5-1,claude-opus-5-5)
 """
@@ -24,16 +25,27 @@ ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY 중 **하나만** 있으면 
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import contextlib
 import datetime as dt
+import email.utils
+import html
 import json
 import os
 import re
 import subprocess
 import sys
 import time
+import urllib.request
 from collections.abc import Callable
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+
+try:  # 외부 XML 을 안전하게 파싱 (엔티티 폭탄 등 방어)
+    from defusedxml import ElementTree as ET
+except ImportError:  # pragma: no cover - 로컬에 없으면 표준 라이브러리로
+    import xml.etree.ElementTree as ET  # noqa: N817
 
 ROOT = Path(__file__).resolve().parents[1]  # ai-brief/
 DEFAULT_DATA_DIR = ROOT / "data"
@@ -800,7 +812,12 @@ def gemini_client():
 
     return genai.Client(
         api_key=os.environ["GEMINI_API_KEY"],
-        http_options=types.HttpOptions(api_version=GEMINI_API_VERSION),
+        # 과부하인 모델에서 오래 붙잡히지 않도록 요청당 3분 제한, SDK 자체 재시도는 1회만.
+        http_options=types.HttpOptions(
+            api_version=GEMINI_API_VERSION,
+            timeout=180_000,
+            retry_options=types.HttpRetryOptions(attempts=2),
+        ),
     )
 
 
@@ -874,6 +891,12 @@ def _gemini_generate(client, model: str, contents, cfg):
     for attempt in range(2):
         try:
             return client.models.generate_content(model=model, contents=contents, config=cfg)
+        except errors.ServerError as e:
+            if attempt == 0:
+                log(f"{model} 일시 오류({getattr(e, 'code', '?')}), 5초 후 재시도")
+                time.sleep(5)
+                continue
+            raise ModelUnavailable(f"{getattr(e, 'code', '?')} 일시 오류: {str(e)[:160]}") from e
         except errors.ClientError as e:
             if getattr(e, "code", None) != 429:
                 raise
@@ -883,6 +906,14 @@ def _gemini_generate(client, model: str, contents, cfg):
                 time.sleep(delay + 2)
                 continue
             raise ModelUnavailable(f"429 사용 한도 초과 ({summary})") from e
+        except errors.APIError:
+            raise
+        except Exception as e:  # noqa: BLE001 - 연결 끊김·타임아웃 등 전송 오류는 일시 오류로 본다
+            if attempt == 0:
+                log(f"{model} 연결 오류({type(e).__name__}), 5초 후 재시도")
+                time.sleep(5)
+                continue
+            raise ModelUnavailable(f"연결 오류: {type(e).__name__}: {str(e)[:120]}") from e
     raise ModelUnavailable("429 사용 한도 초과")
 
 
@@ -992,16 +1023,26 @@ def pick_provider(explicit: str | None) -> str:
 
 
 def generate_with_fallback(providers: list[str], date: str, briefs: list[dict]) -> dict:
+    """검색 모드로 제공자를 차례로 시도하고, 모두 실패하면(무료 키·크레딧 소진 등) RSS 모드로 다시 시도한다.
+    BRIEF_RESEARCH=search|feeds 로 한쪽만 쓸 수 있다."""
+    plans: list[tuple[str, str]] = []
+    if RESEARCH_MODE in ("auto", "search"):
+        plans += [("search", p) for p in providers]
+    if RESEARCH_MODE in ("auto", "feeds"):
+        plans += [("feeds", p) for p in providers]
     failures: list[str] = []
-    for n, provider in enumerate(providers, 1):
-        log(f"제공자: {provider} ({n}/{len(providers)})")
+    for n, (how, provider) in enumerate(plans, 1):
+        label = "웹검색" if how == "search" else "RSS"
+        log(f"제공자: {provider} · {label} 모드 ({n}/{len(plans)})")
         try:
-            return generate(provider, date, briefs)
-        except Exception as e:  # noqa: BLE001 - 어떤 이유든 다음 제공자로 넘긴다
+            if how == "search":
+                return generate(provider, date, briefs)
+            return generate_from_feeds(provider, date, briefs)
+        except Exception as e:  # noqa: BLE001 - 어떤 이유든 다음 방법으로 넘긴다
             msg = re.sub(r"\s+", " ", str(e))[:300]
-            failures.append(f"{provider}: {msg}")
-            if n < len(providers):
-                log(f"{provider} 실패, 다음 제공자로 전환: {msg}")
+            failures.append(f"{provider}/{label}: {msg}")
+            if n < len(plans):
+                log(f"{provider}/{label} 실패, 다음으로 전환: {msg}")
     raise SystemExit("모든 제공자가 실패했습니다.\n" + "\n".join(failures))
 
 
@@ -1092,6 +1133,344 @@ def generate(provider: str, date: str, briefs: list[dict], attempts: int = 3) ->
         log("이번 시도 실패: " + "; ".join(problems))
         time.sleep(5)
     raise RuntimeError("브리핑 생성 실패: " + "; ".join(last_problems))
+
+
+# ----------------------------------------------------------------------------- RSS 모드
+# 웹검색 도구를 쓸 수 없을 때(무료 키, 크레딧 소진 등) 주요 매체 RSS 에서 최근 기사를 모아
+# 모델에게는 '선별'과 '작성'만 맡긴다. 도구 호출이 없어 무료 등급에서도 동작한다.
+RESEARCH_MODE = (os.environ.get("BRIEF_RESEARCH") or "auto").strip().lower()
+if RESEARCH_MODE not in ("auto", "search", "feeds"):
+    RESEARCH_MODE = "auto"
+
+# (매체명, 피드 URL, AI 키워드 필터 필요 여부)
+FEEDS: list[tuple[str, str, bool]] = [
+    ("TechCrunch", "https://techcrunch.com/category/artificial-intelligence/feed/", False),
+    ("The Verge", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", False),
+    ("VentureBeat", "https://venturebeat.com/category/ai/feed/", False),
+    ("MIT Technology Review", "https://www.technologyreview.com/topic/artificial-intelligence/feed", False),
+    ("Ars Technica", "https://arstechnica.com/ai/feed/", False),
+    ("OpenAI", "https://openai.com/news/rss.xml", False),
+    ("Google", "https://blog.google/technology/ai/rss/", False),
+    ("Microsoft", "https://blogs.microsoft.com/ai/feed/", False),
+    ("AI타임스", "https://www.aitimes.com/rss/allArticle.xml", False),
+    ("ZDNet Korea", "https://feeds.feedburner.com/zdkorea", True),
+    ("전자신문", "https://rss.etnews.com/Section901.xml", True),
+    ("디지털데일리", "https://www.ddaily.co.kr/rss/allArticle.xml", True),
+]  # fmt: skip
+AI_KEYWORDS = re.compile(
+    r"(?<![A-Za-z])(AI|AX|LLM|GPT|GPU)(?![A-Za-z])|인공지능|생성형|챗GPT|제미나이|Gemini|Claude|클로드|"
+    r"에이전트|오픈AI|OpenAI|앤트로픽|Anthropic|머신러닝|딥러닝|파운데이션 모델|엔비디아|NVIDIA|Copilot|코파일럿",
+    re.IGNORECASE,
+)
+FEED_UA = "Mozilla/5.0 (compatible; ai-daily-brief/1.0; +https://github.com/hungryhahaha/open)"
+FEED_WINDOW_HOURS = 48
+FEED_MAX_PER_SOURCE = 12
+FEED_MAX_CANDIDATES = 80
+FEED_PICKS = 7
+ARTICLE_MAX_CHARS = 5000
+_FEED_CANDIDATES: list[dict] | None = None
+
+FEEDS_RESEARCH_RULES = """## 조사 원칙 (RSS 모드)
+- 이번 실행에는 웹검색 도구가 없습니다. 주요 매체 RSS 에서 모은 최신 기사 목록과, 고른 기사의 본문 발췌가 제공됩니다.
+- 제공된 기사에 있는 사실·수치·날짜만 씁니다. 추측으로 보태지 않으며, 본문에서 확인되지 않는 수치는 쓰지 않습니다.
+- 최근 24~48시간 기사를 우선합니다. 이전 브리핑에 이미 실린 소식은 큰 후속 변화가 있을 때만 다루고, 그 경우 제목에 '(후속)'을 붙입니다.
+- 출처 다양성: 항목마다 서로 다른 매체를 고릅니다.
+
+"""
+_rs, _ss = SYSTEM_PROMPT.index("## 조사 원칙"), SYSTEM_PROMPT.index("## 선별 기준")
+FEEDS_SYSTEM_PROMPT = (SYSTEM_PROMPT[:_rs] + FEEDS_RESEARCH_RULES + SYSTEM_PROMPT[_ss:]).replace(
+    "고른 소식은 web_fetch(또는 확인 검색)로 원문을 읽고 씁니다. ",
+    "제공된 기사 본문을 근거로 씁니다. ",
+)
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
+
+
+def _clean_text(s: str, limit: int) -> str:
+    s = re.sub(r"<[^>]+>", " ", html.unescape(s or ""))
+    return re.sub(r"\s+", " ", html.unescape(s)).strip()[:limit]
+
+
+def parse_feed_date(s: str) -> dt.datetime | None:
+    s = (s or "").strip()
+    if not s:
+        return None
+    when = None
+    try:
+        when = email.utils.parsedate_to_datetime(s)
+    except (TypeError, ValueError, IndexError):
+        when = None
+    if when is None:
+        try:
+            when = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=KST)  # 국내 피드는 시간대 없이 KST 로 주는 경우가 많다
+    return when
+
+
+def parse_feed(xml_bytes: bytes, source: str, ai_filter: bool) -> list[dict]:
+    """RSS 2.0 / Atom 을 파싱해 {source,title,url,summary,published} 목록을 돌려준다."""
+    root = ET.fromstring(xml_bytes)
+    out: list[dict] = []
+    for node in root.iter():
+        if _local(node.tag) not in ("item", "entry"):
+            continue
+        title = url = summary = date_s = ""
+        for ch in node:
+            name = _local(ch.tag)
+            if name == "title":
+                title = ch.text or ""
+            elif name == "link":
+                href = ch.get("href")
+                if href and ch.get("rel", "alternate") == "alternate":
+                    url = url or href
+                elif not href and (ch.text or "").strip():
+                    url = url or ch.text.strip()
+            elif name in ("pubdate", "published", "updated", "date") and not date_s:
+                date_s = ch.text or ""
+            elif name in ("description", "summary", "encoded", "content") and not summary:
+                summary = ch.text or ""
+        title = _clean_text(title, 200)
+        summary = _clean_text(summary, 400)
+        if not title or not normalize_url(url):
+            continue
+        if ai_filter and not AI_KEYWORDS.search(f"{title} {summary}"):
+            continue
+        out.append(
+            {
+                "source": source,
+                "title": title,
+                "url": url.strip(),
+                "summary": summary,
+                "published": parse_feed_date(date_s),
+            }
+        )
+    return out
+
+
+def _http_get(url: str, limit: int = 3_000_000, timeout: int = 15) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": FEED_UA, "Accept": "*/*"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - http(s) 만 넣는다
+        return resp.read(limit)
+
+
+def select_recent(items: list[dict], now: dt.datetime) -> list[dict]:
+    """최근 48시간 기사(부족하면 7일)를 매체별 상한·중복 제거 후 최신순으로 고른다."""
+    for hours in (FEED_WINDOW_HOURS, 24 * 7):
+        cutoff = now - dt.timedelta(hours=hours)
+        seen_keys: set[str] = set()
+        per_source: dict[str, int] = {}
+        picked: list[dict] = []
+        for it in sorted(items, key=lambda x: x["published"], reverse=True):
+            if it["published"] < cutoff or it["published"] > now + dt.timedelta(hours=6):
+                continue
+            key = normalize_url(it["url"])
+            tkey = re.sub(r"\W+", "", it["title"].lower())[:60]
+            if key in seen_keys or tkey in seen_keys:
+                continue
+            if per_source.get(it["source"], 0) >= FEED_MAX_PER_SOURCE:
+                continue
+            seen_keys.update({key, tkey})
+            per_source[it["source"]] = per_source.get(it["source"], 0) + 1
+            picked.append(it)
+        if len(picked) >= 12 or hours != FEED_WINDOW_HOURS:
+            return picked[:FEED_MAX_CANDIDATES]
+    return []
+
+
+def collect_feed_candidates() -> list[dict]:
+    global _FEED_CANDIDATES
+    if _FEED_CANDIDATES is not None:
+        return _FEED_CANDIDATES
+    items: list[dict] = []
+
+    def fetch(feed: tuple[str, str, bool]) -> tuple[str, list[dict] | str]:
+        name, url, ai_filter = feed
+        try:
+            return name, parse_feed(_http_get(url), name, ai_filter)
+        except Exception as e:  # noqa: BLE001 - 피드 하나가 실패해도 나머지로 진행
+            return name, f"{type(e).__name__}: {str(e)[:80]}"
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        for name, result in pool.map(fetch, FEEDS):
+            if isinstance(result, str):
+                log(f"RSS {name}: 실패 ({result})")
+                continue
+            dated = [r for r in result if r["published"] is not None]
+            items.extend(dated)
+            log(f"RSS {name}: {len(dated)}건")
+    picked = select_recent(items, dt.datetime.now(KST))
+    for n, it in enumerate(picked, 1):
+        it["id"] = f"c{n}"
+        it["mmdd"] = it["published"].astimezone(KST).strftime("%m.%d")
+    _FEED_CANDIDATES = picked
+    log(f"RSS 후보 기사 {len(picked)}건 (매체 {len({p['source'] for p in picked})}곳)")
+    return picked
+
+
+class _ParagraphText(HTMLParser):
+    """기사 HTML 에서 <p> 문단 텍스트만 모은다(스크립트·스타일·내비게이션 제외)."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._in_p = 0
+        self._skip = 0
+        self._buf: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style", "noscript", "nav", "footer", "aside", "form"):
+            self._skip += 1
+        elif tag == "p":
+            self._in_p += 1
+            self._buf = []
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style", "noscript", "nav", "footer", "aside", "form") and self._skip:
+            self._skip -= 1
+        elif tag == "p" and self._in_p:
+            self._in_p -= 1
+            text = re.sub(r"\s+", " ", "".join(self._buf)).strip()
+            if len(text) >= 40:
+                self.parts.append(text)
+
+    def handle_data(self, data):
+        if self._in_p and not self._skip:
+            self._buf.append(data)
+
+
+def extract_article_text(html_bytes: bytes, limit: int = ARTICLE_MAX_CHARS) -> str:
+    text = html_bytes.decode("utf-8", errors="replace")
+    parser = _ParagraphText()
+    with contextlib.suppress(Exception):  # 깨진 HTML 은 모은 데까지만 쓴다
+        parser.feed(text)
+    return "\n".join(parser.parts)[:limit]
+
+
+def fetch_article_texts(items: list[dict]) -> None:
+    def get(it: dict) -> tuple[dict, str]:
+        try:
+            return it, extract_article_text(_http_get(it["url"], limit=2_000_000))
+        except Exception:  # noqa: BLE001 - 본문을 못 받으면 RSS 요약을 쓴다
+            return it, ""
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=7) as pool:
+        for it, body in pool.map(get, items):
+            it["body"] = body if len(body) >= 300 else it.get("summary", "")
+            log(f"본문 {it['id']} {it['source']}: {len(it['body'])}자")
+
+
+def build_feed_select_prompt(date: str, briefs: list[dict], cands: list[dict]) -> str:
+    rows = "\n".join(
+        f"{c['id']} | {c['source']} | {c['mmdd']} | {c['title']} | {c['summary'][:260]}"
+        for c in cands
+    )
+    return f"""오늘 날짜(한국 시간): {date}
+
+## 최근 브리핑 (중복 금지)
+{recent_context(briefs)}
+
+## 후보 기사 (주요 매체 RSS, 최신순)
+각 줄: id | 매체 | 날짜 | 제목 | 요약
+{rows}
+
+## 할 일
+선별 기준에 따라 AX 기획자가 꼭 알아야 할 기사를 우선순위대로 {FEED_PICKS}개 고르세요.
+- 서로 다른 매체를 최소 4곳 이상 섞고, 같은 사건을 다룬 기사는 하나만 고릅니다.
+- 국내 동향 기사가 있으면 1개 이상 포함합니다.
+- 결과는 JSON 하나만 ```json 펜스로 출력합니다: {{"picks": ["c3", "c17", ...]}}"""
+
+
+def build_feed_write_prompt(date: str, briefs: list[dict], picked: list[dict]) -> str:
+    blocks = "\n\n".join(
+        f"### {c['id']} | {c['source']} | {c['mmdd']}\nURL: {c['url']}\n제목: {c['title']}\n본문:\n{c['body']}"
+        for c in picked
+    )
+    return f"""오늘 날짜(한국 시간): {date}
+
+## 최근 브리핑 (중복 금지, 개념도 겹치지 않게)
+{recent_context(briefs)}
+
+## 선택된 기사 (본문 발췌)
+{blocks}
+
+## 할 일
+1. 위 기사들만 근거로 선별 기준에 맞는 3~5개 항목과 '오늘의 개념' 1개를 작성합니다. 기사에 없는 사실·수치는 쓰지 않습니다.
+2. source_url 은 위 URL 을 그대로, source_name 은 매체명, source_date 는 날짜(MM.DD)를 그대로 씁니다. 항목마다 다른 매체를 고릅니다.
+3. 마지막에 지정된 JSON 하나를 ```json 펜스 안에 출력합니다. "date" 는 "{date}" 로 씁니다."""
+
+
+def heuristic_picks(cands: list[dict], n: int = FEED_PICKS) -> list[dict]:
+    """모델이 고르지 못했을 때: 매체가 겹치지 않게 최신 기사부터."""
+    out, used = [], set()
+    for c in cands:
+        if c["source"] not in used:
+            out.append(c)
+            used.add(c["source"])
+        if len(out) >= n:
+            break
+    return out
+
+
+def generate_from_feeds(provider: str, date: str, briefs: list[dict], attempts: int = 2) -> dict:
+    cands = collect_feed_candidates()
+    if len(cands) < MIN_ITEMS:
+        raise RuntimeError(f"RSS 후보 기사가 {len(cands)}건뿐이라 작성할 수 없음")
+    by_id = {c["id"]: c for c in cands}
+    recent_titles = {
+        str(i.get("title", "")) for b in briefs for i in b.get("items", []) if isinstance(i, dict)
+    }
+
+    text, _, _, model = run_with_model_chain(
+        provider,
+        FEEDS_SYSTEM_PROMPT,
+        build_feed_select_prompt(date, briefs, cands),
+        use_tools=False,
+    )
+    raw = extract_json(text) or {}
+    ids = [str(x).strip() for x in raw.get("picks", []) if str(x).strip() in by_id]
+    picked = [by_id[i] for i in dict.fromkeys(ids)][:FEED_PICKS] or heuristic_picks(cands)
+    log("선별: " + ", ".join(f"{c['id']}({c['source']})" for c in picked))
+    fetch_article_texts(picked)
+    seen = {c["url"] for c in picked}
+    prompt = build_feed_write_prompt(date, briefs, picked)
+
+    problems: list[str] = []
+    for attempt in range(1, attempts + 1):
+        log(f"RSS 모드 작성 시도 {attempt}/{attempts}")
+        text, _, _, model = run_with_model_chain(
+            provider, FEEDS_SYSTEM_PROMPT, prompt, use_tools=False
+        )
+        raw = extract_json(text)
+        brief, problems = (
+            (None, ["JSON 을 찾지 못함"])
+            if raw is None
+            else validate_brief(raw, date, seen, recent_titles)
+        )
+        if brief is None:
+            log("검증 실패: " + "; ".join(problems))
+            repair = build_repair_prompt(text, problems, seen, date)
+            text2, _, _, model = run_with_model_chain(
+                provider, FEEDS_SYSTEM_PROMPT, repair, use_tools=False
+            )
+            raw2 = extract_json(text2)
+            brief, problems = (
+                (None, ["수정본에서도 JSON 을 찾지 못함"])
+                if raw2 is None
+                else validate_brief(raw2, date, seen, recent_titles)
+            )
+        if brief is not None:
+            if problems:
+                log("경고(제외된 항목): " + "; ".join(problems))
+            brief["generated_at"] = now_iso_kst()
+            brief["generated_by"] = f"{provider}/{model} · RSS"
+            return brief
+        time.sleep(3)
+    raise RuntimeError("RSS 모드 작성 실패: " + "; ".join(problems))
 
 
 def mock_brief(date: str) -> dict:

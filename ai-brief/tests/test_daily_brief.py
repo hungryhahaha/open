@@ -231,6 +231,9 @@ def test_validate_rejects_vague_summaries_and_limits_stale_items(mod):
 
 
 def test_provider_order_and_fallback(mod, monkeypatch):
+    monkeypatch.setattr(
+        mod, "RESEARCH_MODE", "search"
+    )  # 이 테스트는 웹검색 모드만 본다(네트워크 없음)
     for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "a")
@@ -335,3 +338,98 @@ def test_gemini_quota_info_distinguishes_minute_and_zero_limits(mod):
         _FakeQuotaError(_quota_details("GenerateRequestsPerDayPerProjectPerModel-FreeTier", "0"))
     )
     assert per_minute is False
+
+
+RSS_SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>t</title>
+<item><title>OpenAI ships agent platform &amp; pricing</title>
+<link>https://example.com/news/openai-agents?utm_source=rss</link>
+<pubDate>Sun, 08 Nov 2026 22:10:00 +0000</pubDate>
+<description><![CDATA[<p>OpenAI launched <b>Frontier</b> for enterprises.</p>]]></description></item>
+<item><title>No date item</title><link>https://example.com/x</link></item>
+<item><title>\xec\x82\xbc\xec\x84\xb1 \xeb\xb0\x98\xeb\x8f\x84\xec\xb2\xb4 \xec\x8b\xa4\xec\xa0\x81</title>
+<link>https://example.co.kr/1</link><pubDate>Mon, 09 Nov 2026 09:00:00 +0900</pubDate></item>
+</channel></rss>"""
+
+ATOM_SAMPLE = b"""<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>t</title>
+<entry><title>Gemini update for Workspace</title>
+<link rel="alternate" href="https://blog.example.com/gemini-workspace"/>
+<updated>2026-11-08T15:00:00Z</updated><summary>New AI features.</summary></entry>
+</feed>"""
+
+
+def test_parse_feed_rss_and_atom(mod):
+    items = mod.parse_feed(RSS_SAMPLE, "Example", ai_filter=False)
+    assert items[0]["title"] == "OpenAI ships agent platform & pricing"
+    assert items[0]["summary"] == "OpenAI launched Frontier for enterprises."
+    assert items[0]["published"].year == 2026
+    assert items[1]["published"] is None  # 날짜 없는 기사는 나중에 걸러진다
+    filtered = mod.parse_feed(RSS_SAMPLE, "Example", ai_filter=True)
+    assert [i["title"] for i in filtered] == [
+        "OpenAI ships agent platform & pricing"
+    ]  # AI 키워드 없는 기사 제외
+    atom = mod.parse_feed(ATOM_SAMPLE, "Blog", ai_filter=False)
+    assert atom[0]["url"] == "https://blog.example.com/gemini-workspace"
+    assert atom[0]["published"].tzinfo is not None
+
+
+def test_select_recent_window_dedup_and_cap(mod, monkeypatch):
+    now = mod.dt.datetime(2026, 11, 9, 12, 0, tzinfo=mod.KST)
+
+    def it(src, title, hours_ago, url):
+        return {
+            "source": src,
+            "title": title,
+            "url": url,
+            "summary": "",
+            "published": now - mod.dt.timedelta(hours=hours_ago),
+        }
+
+    items = [it("A", f"Story {i}", i, f"https://a.com/{i}") for i in range(1, 20)]
+    items.append(it("B", "Story 1", 2, "https://b.com/dup-title"))  # 제목 중복
+    items.append(it("C", "Old", 24 * 6, "https://c.com/old"))
+    monkeypatch.setattr(mod, "FEED_MAX_PER_SOURCE", 5)
+    picked = mod.select_recent(items, now)
+    assert len([p for p in picked if p["source"] == "A"]) == 5
+    assert all(p["url"] != "https://b.com/dup-title" for p in picked)
+    # 48시간 안에 12건이 안 되면 7일로 넓힌다
+    assert any(p["source"] == "C" for p in picked)
+
+
+def test_extract_article_text_keeps_paragraphs_only(mod):
+    page = (
+        b"<html><head><script>var x = '<p>not this</p>';</script></head><body>"
+        b"<nav><p>Menu item that is long enough to pass the filter easily</p></nav>"
+        b"<p>First paragraph of the article with enough characters to be kept.</p>"
+        b"<p>short</p><p>Second paragraph explaining the numbers: revenue grew 47% to $17B.</p>"
+        b"</body></html>"
+    )
+    text = mod.extract_article_text(page)
+    assert "First paragraph" in text and "47%" in text
+    assert "Menu item" not in text and "not this" not in text and "short" not in text
+
+
+def test_fallback_goes_from_search_to_feeds(mod, monkeypatch):
+    monkeypatch.setattr(mod, "RESEARCH_MODE", "auto")
+    calls = []
+
+    def search_fails(provider, date, briefs):
+        calls.append(("search", provider))
+        raise RuntimeError("429 billing required for google_search")
+
+    def feeds_ok(provider, date, briefs):
+        calls.append(("feeds", provider))
+        return {"date": date, "items": [], "generated_by": f"{provider} · RSS"}
+
+    monkeypatch.setattr(mod, "generate", search_fails)
+    monkeypatch.setattr(mod, "generate_from_feeds", feeds_ok)
+    brief = mod.generate_with_fallback(["anthropic", "gemini"], "2026-11-09", [])
+    assert calls == [("search", "anthropic"), ("search", "gemini"), ("feeds", "anthropic")]
+    assert brief["generated_by"] == "anthropic · RSS"
+
+
+def test_feeds_system_prompt_drops_search_instructions(mod):
+    assert "웹검색 도구를 최소" not in mod.FEEDS_SYSTEM_PROMPT
+    assert "RSS 모드" in mod.FEEDS_SYSTEM_PROMPT
+    assert "## 선별 기준" in mod.FEEDS_SYSTEM_PROMPT and "## 출력 형식" in mod.FEEDS_SYSTEM_PROMPT
