@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-10",
+  "oneliner": "메타·앤트로픽의 최신 에이전트 모델 공개와 소스코드 보안 이슈 속, 국내 AX 매출 실적화 가속.",
+  "items": [
+    {
+      "category": "model",
+      "title": "메타, 에이전트 반복 업무용 10센트 초경량 모델 'Muse Ember' 출시",
+      "summary": "메타가 에이전트의 대량 반복 실행 업무에 특화된 초경량 AI 모델 'Muse Ember'를 10일 발표했습니다. 백만 입력 토큰당 10센트 비용으로 툴 호출, 코딩 하위과업, 라우팅, 긴 문서 파싱을 수행하며 Anthropic Haiku 및 OpenAI Luna보다 저렴합니다. 텍스트·이미지·오디오 멀티모달을 지원하며, 고성능 모델 Muse Wonder가 기획하고 Ember가 대량 실행을 맡는 에이전틱 구조에 최적화되었습니다.",
+      "why": "모든 작업을 고성능 프리미엄 모델로 처리하면 에이전트 시스템 운영 예산이 급증합니다. 상위 모델이 계획을 세우고 백만 토큰당 10센트급 초저가 모델이 대량 실행을 수행하는 하이브리드 오케스트레이션 파이프라인을 기획해 API 비용을 대폭 절감해야 합니다.",
+      "source_name": "TechCrunch",
+      "source_date": "11.10",
+      "source_url": "https://techcrunch.com/2026/11/09/meta-releases-muse-ember-a-new-lightweight-model-for-agent-execution"
+    },
+    {
+      "category": "model",
+      "title": "앤트로픽, 대규모 기술 과제용 'Claude Fable 5.2'·'Mythos 5.2' 공개",
+      "summary": "앤트로픽이 복잡한 소프트웨어 엔지니어링과 과학 과제를 해결하는 신규 모델 'Claude Fable 5.2'와 'Claude Mythos 5.2'를 10일 발표했습니다. 사전 테스트에서 소프트웨어 이관, 전자기기 3종 설계, 블랙홀 물리학 문제 해결 및 페르마의 마지막 정리 증명을 30시간 만에 완료하는 성과를 거두었습니다. Fable 5.2는 즉시 출시되었으며 Mythos 5.2는 검증된 기관에 우선 공개됩니다.",
+      "why": "AI가 단순 보조를 넘어 장기 엔지니어링 과제와 자율 소프트웨어 마이그레이션을 완수하는 수준에 도달했습니다. 개발 조직의 AX 기획 시 단위 프롬프트 입력을 넘어 엔지니어링 팀 수준의 과업을 에이전트에 통째로 위임하는 프로세스 재설계가 필요합니다.",
+      "source_name": "The Verge",
+      "source_date": "11.10",
+      "source_url": "https://theverge.com/ai-artificial-intelligence/1030005/anthropic-claude-fable-mythos-5-2"
+    },
+    {
+      "category": "practice",
+      "title": "Claude Code, 로컬 설정 파일 문제로 깃허브서 API키·DB비밀번호 유출",
+      "summary": "앤트로픽의 개발 에이전트 도구 'Claude Code'의 승인 규칙 저장 파일(.claude/settings.local.json)이 깃허브 공개 저장소로 업로드되어 63개 조직의 1,100여 건 민감 정보가 유출된 것이 확인되었습니다. 승인 과정에서 '다시 묻지 않음'을 선택할 때 API 토큰과 DB 비밀번호가 설정 파일에 평문으로 기록되며 발생한 보안 허점입니다.",
+      "why": "AI 개발 에이전트 도입 시 로컬 설정 파일이나 자동 승인 기록에 비밀키가 저장되어 외부로 누출되는 신종 위험이 확인됐습니다. 사내 개발 도구 거버넌스 수립 시 로컬 설정 파일의 Git 포함 방지 수칙과 시크릿 스캐닝 내재화를 필수 요구사항으로 규정해야 합니다.",
+      "source_name": "Ars Technica",
+      "source_date": "11.10",
+      "source_url": "https://arstechnica.com/ai/2026/11/claude-code-settings-files-expose-thousands-of-secrets-on-github"
+    },
+    {
+      "category": "korea",
+      "title": "KT, 3분기 누적 AX 매출 1.1조원 돌파… 2031년까지 AIDC 1GW 확충",
+      "summary": "KT의 3분기 AX 및 클라우드 사업 합산 매출이 전년 동기 대비 9.8% 증가한 3,933억원을 기록하며 3분기 누적 AX 매출 1조 1,119억원을 달성했다고 10일 밝혔습니다. KT는 2028년 AX 매출을 2025년 대비 2배 이상 늘릴 계획이며, 2031년까지 AIDC 용량 1GW 추가 확보 및 500개 이상 AI 모델을 연동하는 'KT 토큰팩토리' 사업을 추진합니다.",
+      "why": "국산 통신·클라우드 거인의 AX 매출 실체와 인프라 펀더멘털 투자 현황을 보여주는 사례입니다. Enterprise AX 기획 시 국내 인프라 벤더의 전용 회선 및 멀티 AI 모델 통합 관리(토큰팩토리) 플랫폼 활용 가능성을 검토해볼 수 있습니다.",
+      "source_name": "ZDNet Korea",
+      "source_date": "11.10",
+      "source_url": "https://zdnet.co.kr/view?no=20261110103604"
+    }
+  ],
+  "concept": {
+    "term": "온디바이스 AI",
+    "en": "On-Device AI (기기 자체 실행형 인공지능)",
+    "body": "클라우드 중앙 서버를 거치지 않고 스마트폰, 로봇, 차량, 산업용 장비 등 개별 기기에 탑재된 AI 전용 반도체(NPU)에서 AI 모델을 직접 실행하는 기술입니다. 마치 매번 인공위성에 물어보지 않고 머릿속 지식으로 현장에서 즉시 판단하는 것과 같습니다. 데이터 송수신 과정이 없어 인터넷 연결이 끊겨도 작동하며, 응답 속도가 빠르고 민감 데이터가 기기 밖으로 나가지 않는 장점이 있습니다.",
+    "why": "데이터 보안이 극도로 중요한 제조·금융 현장이나 초저지연 반응이 필요한 실물 장비를 기획할 때, 클라우드 호출 비용과 데이터 유출 위험을 동시에 줄이는 핵심 AX 선택지입니다."
+  },
+  "generated_at": "2026-11-10T12:50:35+09:00",
+  "generated_by": "gemini/gemini-3.6-flash · RSS"
+}
