@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-18",
+  "oneliner": "업무 OS가 된 코필럿과 GPT-6.2 출시로 가속화된 에이전트 경쟁",
+  "items": [
+    {
+      "category": "practice",
+      "title": "MS, 코필럿을 '업무용 새 OS'로 선언… Office 앱 통합",
+      "summary": "마이크로소프트가 Ignite 2026에서 Word, Excel, PowerPoint가 코필럿 내부에서 작동하는 구조를 공개하며 코필럿을 '업무를 위한 새로운 OS'로 정의했습니다. 사용자가 에이전트에게 책임을 위임하는 자율형 AI 'Autopilot'과 기업의 이메일, 일정 등 맥락을 파악하는 'Work IQ'가 함께 발표되었습니다. 나델라 CEO는 AI 모델을 무조건 신뢰하기보다 권한을 분리하여 제어하는 아키텍처의 중요성을 강조했습니다.",
+      "why": "기존에는 앱 사용을 돕는 보조 도구(Clippy 방식)였다면, 이제는 AI 에이전트가 주도하고 오피스 앱은 부품(Plugin)으로 전락하는 패러다임 시프트입니다. 기획자는 사내 AI 도입 시 개별 앱 기능보다 에이전트가 조직 데이터(Work IQ)에 접근할 권한과 거버넌스를 설계하는 데 집중해야 합니다.",
+      "source_name": "Ars Technica",
+      "source_date": "11.18",
+      "source_url": "https://arstechnica.com/gadgets/2026/11/microsoft-calls-copilot-the-new-os-for-work-at-ignite-keynote"
+    },
+    {
+      "category": "model",
+      "title": "OpenAI, GPT-6.2 'Astra' 및 'Sol' 전격 공개",
+      "summary": "OpenAI가 전문적 출력, 코딩, 특히 '컴퓨터 사용(Computer Use)' 성능을 대폭 개선한 GPT-6.2 모델 2종(Astra, Sol)을 출시했습니다. 이전 모델 대비 효율성을 높여 토큰 당 비용을 낮추었으며, ChatGPT Work와 Codex, API를 통해 즉시 사용 가능합니다. 이는 MS의 에이전트 전략과 맞물려 실제 PC 제어 역량을 강화하는 데 초점이 맞춰져 있습니다.",
+      "why": "성능 향상보다 '비용 절감'과 '컴퓨터 사용 기능'에 주목해야 합니다. AX 기획자는 복잡한 업무 자동화 워크플로우를 설계할 때 GPT-6.2를 통해 API 호출 비용을 최적화하고, 에이전트가 직접 사내 레거시 SW를 조작하게 하는 과제를 검토할 시점입니다.",
+      "source_name": "OpenAI",
+      "source_date": "11.18",
+      "source_url": "https://openai.com/index/introducing-gpt-6-2-astra-sol"
+    },
+    {
+      "category": "market",
+      "title": "엔비디아 젠슨 황 복귀 무산… 655억 달러 투자 향방 '안개'",
+      "summary": "엔비디아 이사회가 젠슨 황 전 CEO의 복귀를 공식 거부하고 후임 물색에 착수했습니다. 3분기 매출은 시장 전망치를 상회하는 1,158억 4,000만 달러를 기록했으나, 황이 주도했던 655억 달러(약 87조 원) 규모의 스타트업 투자 약정은 불확실해졌습니다. 콜렛 크레스 임시 CEO는 향후 투자 및 금융 지원 대상을 더 엄격히 평가하겠다는 보수적 입장을 밝혔습니다.",
+      "why": "엔비디아는 단순 칩 제조사를 넘어 AI 스타트업 생태계의 최대 큰손이었습니다. 리더십 교체로 인해 공급망 파트너와 투자 기업들에 대한 지원이 위축될 수 있으므로, 엔비디아 인프라에 의존하는 벤더를 둔 기획자는 공급망 다변화 리스크를 점검해야 합니다.",
+      "source_name": "TechCrunch",
+      "source_date": "11.18",
+      "source_url": "https://techcrunch.com/2026/11/17/nvidias-startup-stakes-ballooned-to-65b-but-huangs-exit-puts-future-deals-in-doubt"
+    },
+    {
+      "category": "tech",
+      "title": "F5, 2027 보안 전망… '멀티모델 AI' 운영 안정성 필수",
+      "summary": "F5 코리아는 국내 기업의 78%가 자체 AI 추론 서비스를 운영 중이며, 평균 7개의 서로 다른 모델을 사용하고 있다고 발표했습니다. 특정 모델 제공업체의 장애에 대비하기 위해 '모델 독립적 아키텍처(Model-agnostic)' 구축이 핵심 과제로 부상했습니다. 또한 AI 에이전트로 인한 데이터 유출 우려(35%)에 대응하기 위한 실시간 'AI 게이트웨이' 도입을 제안했습니다.",
+      "why": "단일 모델(Single-vendor) 의존은 이제 경영 리스크입니다. 기획자는 벤더 종속성을 피하기 위해 여러 모델을 유연하게 교체할 수 있는 추론 환경을 설계하고, 에이전트의 데이터 접근을 실시간 모니터링하는 보안 가드레일을 예산에 반영해야 합니다.",
+      "source_name": "ZDNet Korea",
+      "source_date": "11.18",
+      "source_url": "https://zdnet.co.kr/view?no=20261118105635"
+    }
+  ],
+  "concept": {
+    "term": "AI 가드레일",
+    "en": "AI Guardrails",
+    "body": "AI 모델이 출력하는 답변이나 행동이 기업의 윤리 정책, 보안 규정, 법적 한계를 벗어나지 않도록 설정하는 기술적 안전장치입니다. 볼링장에서 공이 도랑에 빠지지 않게 막아주는 가이드 레일처럼, AI가 환각(Hallucination)을 일으키거나 민감한 사내 기밀을 유출하려 할 때 이를 실시간으로 차단하거나 필터링합니다. 모델 자체를 수정하는 것이 아니라, 입출력 단계에서 검문소 역할을 하는 별도의 레이어로 작동합니다.",
+    "why": "MS Ignite에서 나델라가 'AI는 본질적으로 신뢰할 수 없으므로 제어 아키텍처가 필요하다'고 강조한 핵심 개념입니다. AX 기획자는 에이전트에게 자율성을 부여하기 전, 반드시 비즈니스 규칙에 맞는 가드레일을 설계해야 보안 승인을 통과할 수 있습니다."
+  },
+  "generated_at": "2026-11-18T12:09:38+09:00",
+  "generated_by": "gemini/gemini-3-flash-preview · RSS"
+}
