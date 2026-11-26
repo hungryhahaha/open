@@ -98,6 +98,11 @@ jobs:
           rm -rf _site && mkdir -p _site
           cp ai-brief/index.html _site/index.html
           cp -r ai-brief/data _site/data
+          # 브리프 코치 웹앱도 같은 사이트의 /brief-coach/ 에 함께 올린다 (배포마다 사이트 전체가 교체되므로 두 워크플로 모두 포함)
+          if [ -d brief-coach ]; then
+            mkdir -p _site/brief-coach
+            cp brief-coach/index.html brief-coach/manifest.webmanifest brief-coach/sw.js brief-coach/icon.svg brief-coach/icon-*.png _site/brief-coach/
+          fi
           touch _site/.nojekyll
 
       - uses: actions/configure-pages@v5

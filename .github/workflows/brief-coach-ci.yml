@@ -1,0 +1,19 @@
+# 브리프 코치 분석 엔진 테스트 (합성 음성으로 억양·강세 판정, API 호출 없음).
+name: Brief Coach - tests
+
+on:
+  pull_request:
+    paths: ["brief-coach/**"]
+  push:
+    branches: [main]
+    paths: ["brief-coach/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node --test brief-coach/tests/core.test.mjs
