@@ -226,6 +226,14 @@ canvas.pitch{display:block;width:100%;height:150px}
 .axis .bar i{display:block;height:100%}
 .axis .v{font-family:var(--f-mono);text-align:right;font-size:13px}
 .axis .na{color:var(--ink-3);font-size:12px;text-align:right}
+.axis{row-gap:3px}
+.axis .why{grid-column:1/-1;font-size:12.5px;line-height:1.5;color:var(--ink-2);display:flex;gap:6px;align-items:baseline;min-width:0}
+.axis .why b{flex:none;font-family:var(--f-mono);font-weight:600;font-size:11.5px;color:var(--ink-3);min-width:56px}
+.axis .why.ai b{color:var(--accent)}
+.axis .why span{min-width:0;overflow-wrap:anywhere}
+.axes{gap:14px}
+.score-why{font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-top:4px}
+.blend-note{font-size:12px;color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);padding-top:10px}
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--sunken);color:var(--ink-2);white-space:nowrap}
 .chip.good{background:var(--good-soft);color:var(--good)}
 .chip.warn{background:var(--warn-soft);color:var(--warn)}
@@ -445,9 +453,10 @@ textarea.edit{min-height:180px;font-size:14.5px}
       <div class="card score-card">
         <div class="score-main">
           <div class="ring" id="scoreRing"></div>
-          <div><div class="grade" id="scoreGrade"></div><div class="meta" id="scoreMeta"></div></div>
+          <div><div class="grade" id="scoreGrade"></div><div class="meta" id="scoreMeta"></div><p class="score-why" id="scoreWhy"></p></div>
         </div>
         <div class="axes" id="scoreAxes"></div>
+        <p class="blend-note" id="blendNote"></p>
       </div>
       <div class="card" id="compareCard" hidden>
         <div class="card-head"><h3>지난 연습과 비교</h3><span id="compareDelta"></span></div>
@@ -532,9 +541,11 @@ textarea.edit{min-height:180px;font-size:14.5px}
           <p class="small">OpenAI 키 하나로 <b>받아 적기</b>(녹음 후), <b>모범 낭독</b>, <b>코칭</b>을 모두 씁니다.</p>
           <label class="field"><span>OpenAI API 키</span><input type="password" id="setOaKey" autocomplete="off" placeholder="sk-…"></label>
           <div class="row"><button class="btn" type="button" id="btnTestOa">연결 확인</button><span class="small" id="oaStatus"></span></div>
+          <p class="small">연결 확인을 누르면 이 키로 쓸 수 있는 모델 목록을 읽어 코칭·받아 적기·낭독 모델을 각각 가장 최신으로 고릅니다.</p>
           <div class="grid2">
             <label class="field"><span>코칭 모델</span><select id="setOaModel"><option value="">연결 확인 후 자동 선택</option></select></label>
-            <label class="field"><span>받아 적기 모델</span><select id="setOaStt"><option value="gpt-4o-transcribe">gpt-4o-transcribe (정확)</option><option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe (저렴)</option><option value="whisper-1">whisper-1 (문장 시간 정보)</option></select></label>
+            <label class="field"><span>받아 적기(STT) 모델</span><select id="setOaStt"></select></label>
+            <label class="field"><span>낭독(TTS) 모델</span><select id="setOaTts"></select></label>
             <label class="field"><span>낭독 목소리</span><select id="setOaVoice"><option value="coral">coral (따뜻한 여성)</option><option value="sage">sage (차분한 여성)</option><option value="shimmer">shimmer (밝은 여성)</option><option value="ash">ash (또렷한 남성)</option><option value="onyx">onyx (낮은 남성)</option><option value="echo">echo (부드러운 남성)</option><option value="alloy">alloy (중성)</option><option value="ballad">ballad</option><option value="verse">verse</option><option value="fable">fable</option><option value="nova">nova</option><option value="marin">marin</option><option value="cedar">cedar</option></select></label>
             <label class="field"><span>분석 깊이</span><select id="setEffortOa"><option value="low">가볍게 (빠름)</option><option value="medium">보통 (권장)</option><option value="high">깊게</option></select></label>
           </div>
@@ -1062,10 +1073,37 @@ const BC = (() => {
     if(hasText && kind!=='script' && fillerPerMin<=1) strengths.push('군말이 거의 없습니다.');
     if(hasText && m.hedgeN===0) strengths.push('"~것 같습니다" 같은 흐리는 표현 없이 말했습니다.');
     if(target && duration>0 && duration<=target*1.1 && duration>=target*0.5) strengths.push(`목표 시간 안에 마쳤습니다 (${fmtT(duration)}${durEst?' 예상':''}).`);
-    return {L, kind, units, m, scores:sc, overall, findings, focusIds:findings.slice(0,3).map(f=>f.id), strengths:strengths.slice(0,5), keywords};
+    const OX=b=>b?'O':'X';
+    const reasons={
+      structure: sc.structure!=null? `결론 먼저 ${OX(m.bluf)} · 숫자 ${m.numbers}개 · 구조 표지 ${OX(m.signpost)} · 마지막 요청 ${OX(m.ask)} · 리스크 ${OX(m.risk)}${target? ` · ${fmtT(duration)}${durEst?'(예상)':''}/${fmtT(target)}`:''}` : '평가할 내용(받아 적은 글)이 없습니다',
+      delivery: sc.delivery!=null? `끝 내림 ${fallN}/${known.length} · 끝 올림 ${riseN} · 말끝 흐림 ${trailN}/${pu.length} · 억양 폭 ${(m.rangeSt??0).toFixed(1)}반음${tgtTotal? ` · 핵심어 강세 ${tgtHit}/${tgtTotal}`:''}` : (kind==='script'? '소리 내어 말한 뒤 측정합니다' : '이번 시도에는 억양 측정값이 없습니다'),
+      pace: sc.pace!=null? `${Math.round(rate)} ${m.rateUnit}${rateEst?'(추정)':''}, 권장 ${rateLo}~${rateHi}${m.pauseRatio!=null? ` · 쉼 ${Math.round(m.pauseRatio*100)}%`:''}${m.longestRun!=null? ` · 최장 연속 ${Number(m.longestRun).toFixed(1)}초`:''}` : (kind==='script'? '소리 내어 말한 뒤 측정합니다' : '속도를 잴 수 없었습니다'),
+      language: sc.language!=null? `군말 분당 ${fillerPerMin.toFixed(1)}회 · 흐리는 표현 ${m.hedgeN}회${L==='ko' && closed.length? ` · '~습니다' 종결 ${formalN}/${closed.length}`:''}${runOnN? ` · 긴 문장 ${runOnN}개`:''}` : '평가할 내용(받아 적은 글)이 없습니다'
+    };
+    return {L, kind, units, m, scores:sc, reasons, overall, findings, focusIds:findings.slice(0,3).map(f=>f.id), strengths:strengths.slice(0,5), keywords};
   }
 
-  function compare(prev, cur){
+  // Share of the AI's score in each axis. Content is judged best by the AI; delivery and pace rest on what the device measured.
+  const AI_W={structure:0.6, delivery:0.3, pace:0.2, language:0.5};
+  const AXIS_W={structure:.3, delivery:.3, pace:.2, language:.2};
+  function finalScores(ev, ai){
+    const axes={}; let ws=0, wv=0;
+    const aiScores= ai && ai.scores ? ai.scores : null;
+    for(const k of Object.keys(AXES)){
+      const measured= ev.scores[k];
+      const a= aiScores && aiScores[k] ? aiScores[k] : null;
+      const aiScore= measured!=null && a && typeof a.score==='number' && isFinite(a.score) ? clamp(Math.round(a.score),0,100) : null;
+      const final= measured==null? null : aiScore==null? measured : Math.round((1-AI_W[k])*measured + AI_W[k]*aiScore);
+      axes[k]={final, measured, ai:aiScore, aiWeight:AI_W[k], reason:(ev.reasons||{})[k]||'', aiReason: aiScore!=null? (a.reason||'') : ''};
+      if(final!=null){ ws+=AXIS_W[k]; wv+=AXIS_W[k]*final; }
+    }
+    const overall= ws? Math.round(wv/ws) : null;
+    const rated=Object.keys(axes).filter(k=>axes[k].final!=null).sort((x,y)=>axes[y].final-axes[x].final);
+    const auto= rated.length>=2? `강점은 ${AXES[rated[0]]}(${axes[rated[0]].final}), 보완할 곳은 ${AXES[rated[rated.length-1]]}(${axes[rated[rated.length-1]].final})입니다.` : '';
+    const blended= Object.values(axes).some(x=>x.ai!=null);
+    return {axes, overall, blended, overallReason:(blended && ai && ai.overall_reason) || auto};
+  }
+  function compare(prev, cur, pf, cf){
     if(!prev || !cur) return null;
     const items=(prev.focusIds||[]).map(id=>{
       const f=F[id]; if(!f) return null;
@@ -1075,8 +1113,10 @@ const BC = (() => {
       const status= !still? 'improved' : (now<was*0.8 ? 'partly' : 'not_yet');
       return {id, title:f.title, status};
     }).filter(Boolean);
-    const axes={}; for(const k of Object.keys(AXES)) if(prev.scores[k]!=null && cur.scores[k]!=null) axes[k]=cur.scores[k]-prev.scores[k];
-    return {items, delta:(prev.overall!=null && cur.overall!=null)? cur.overall-prev.overall : null, axes};
+    const ps=k=> pf? pf.axes[k].final : prev.scores[k], cs=k=> cf? cf.axes[k].final : cur.scores[k];
+    const po= pf? pf.overall : prev.overall, co= cf? cf.overall : cur.overall;
+    const axes={}; for(const k of Object.keys(AXES)) if(ps(k)!=null && cs(k)!=null) axes[k]=cs(k)-ps(k);
+    return {items, delta:(po!=null && co!=null)? co-po : null, axes};
   }
 
   /* ---------- script helpers ---------- */
@@ -1162,7 +1202,7 @@ const BC = (() => {
 
   /* ---------- AI coaching prompt ---------- */
   const AI_SCHEMA={type:'object', additionalProperties:false,
-    required:['headline','strengths','focus','previous_check','intonation_notes','bluf_rewrite','model_script','exec_questions','next_drill'],
+    required:['headline','strengths','focus','previous_check','intonation_notes','bluf_rewrite','model_script','exec_questions','next_drill','scores','overall_reason'],
     properties:{
       headline:{type:'string'},
       strengths:{type:'array', items:{type:'string'}},
@@ -1175,7 +1215,11 @@ const BC = (() => {
       bluf_rewrite:{type:'string'},
       model_script:{type:'string'},
       exec_questions:{type:'array', items:{type:'string'}},
-      next_drill:{type:'string'}
+      next_drill:{type:'string'},
+      scores:{type:'object', additionalProperties:false, required:['structure','delivery','pace','language'],
+        properties:Object.fromEntries(['structure','delivery','pace','language'].map(k=>[k,{type:'object', additionalProperties:false, required:['score','reason'],
+          properties:{score:{anyOf:[{type:'integer'},{type:'null'}]}, reason:{type:'string'}}}]))},
+      overall_reason:{type:'string'}
     }};
   const SYSTEM=[
     '당신은 글로벌 최상위 수준의 임원 커뮤니케이션 코치입니다. 전략 컨설팅 파트너와 포춘 500 경영진을 코칭해 온 경험으로, 사용자가 임원 1:1 구두 보고를 소리 내어 연습한 결과를 듣고 다음 연습에서 바로 고칠 수 있는 구체적인 코칭을 합니다.',
@@ -1205,6 +1249,10 @@ const BC = (() => {
     '- model_script: 목표 시간에 맞춘 모범 스크립트. 한 줄에 한 문장. 표기법: 강조 단어는 **단어**, 짧은 쉼은 " / ", 긴 쉼은 " // ", 평서문 끝은 " ↘". 문장당 강조 1~2개, 핵심 숫자 앞에는 " / ".',
     '- exec_questions: 이 보고를 들은 임원이 바로 던질 날카로운 질문 3개.',
     '- next_drill: 다음 시도에서 집중할 한 가지를 한 문장으로.',
+    '- scores: 네 축을 0~100 정수로 채점하고, reason에 채점 근거를 25자 안팎 한 줄로 씁니다(측정값이나 실제 발화를 근거로). 기준: 90 이상 = 글로벌 최상위 임원 브리프, 75~89 = 좋음(조금 다듬으면 됨), 60~74 = 보통, 60 미만 = 큰 수정 필요.',
+    '  structure = 결론 먼저·근거의 숫자·논리 흐름·명확한 요청 / delivery = 문장 끝 하강·말끝 유지·강세 위치·억양 변화폭(억양 측정값 근거) / pace = 속도·쉼·연속 발화(측정값 근거) / language = 군말·흐리는 표현·종결·문장 길이.',
+    '  억양 측정값이 없으면 delivery의 score는 null, 원고 점검이면 delivery와 pace의 score는 null로 둡니다.',
+    '- overall_reason: 종합 점수의 이유를 한 문장으로.',
     '모든 설명은 한국어로 씁니다. 보고 언어가 English이면 bluf_rewrite와 model_script, exec_questions는 영어로 씁니다.'
   ].join('\n');
   function buildAIPrompt(ctx, ev, prevEv, prevAI){
@@ -1249,7 +1297,7 @@ const BC = (() => {
     if(prevEv){
       out.push('');
       out.push('[지난 시도 요약]');
-      out.push(`- 종합 점수 ${prevEv.overall??'-'}점`);
+      out.push(`- 종합 점수 ${finalScores(prevEv, prevAI).overall??'-'}점`);
       const foc= prevAI && prevAI.focus && prevAI.focus.length? prevAI.focus.map(f=>f.title) : prevEv.focusIds.map(id=>F[id]?F[id].title:id);
       out.push(`- 지난번 포커스: ${foc.join(' / ')}`);
       const pm=prevEv.m;
@@ -1269,12 +1317,14 @@ const BC = (() => {
       focus:arr(o.focus).map(f=>({title:str(f&&f.title), why:str(f&&f.why), how:str(f&&f.how), drill:str(f&&f.drill), evidence:str(f&&f.evidence)})).filter(f=>f.title).slice(0,3),
       previous_check:arr(o.previous_check).map(p=>({title:str(p&&p.title), status:['improved','partly','not_yet'].includes(p&&p.status)? p.status:'not_yet', note:str(p&&p.note)})).filter(p=>p.title),
       intonation_notes:arr(o.intonation_notes).map(n=>({quote:str(n&&n.quote), issue:str(n&&n.issue), fix:str(n&&n.fix)})).filter(n=>n.quote||n.fix).slice(0,4),
-      bluf_rewrite:str(o.bluf_rewrite), model_script:str(o.model_script), exec_questions:arr(o.exec_questions).map(str).filter(Boolean).slice(0,4), next_drill:str(o.next_drill)
+      bluf_rewrite:str(o.bluf_rewrite), model_script:str(o.model_script), exec_questions:arr(o.exec_questions).map(str).filter(Boolean).slice(0,4), next_drill:str(o.next_drill),
+      scores: o.scores && typeof o.scores==='object'? Object.fromEntries(['structure','delivery','pace','language'].map(k=>{ const x=o.scores[k]||{}; const n=Number(x.score); return [k,{score: x.score==null || !isFinite(n)? null : clamp(Math.round(n),0,100), reason:str(x.reason)}]; })) : null,
+      overall_reason:str(o.overall_reason)
     };
   }
 
   return {detectPitch, Tracker, phraseMetrics, countNuclei, prosodyStage, evaluate, compare, analyzeText, extractKeywords, splitSentences, autoMark, speechChunks, alignSentences, toSpeechText,
-    buildAIPrompt, normalizeAI, AI_SCHEMA, AXES, F, CONTOUR_KO, AUD, PURPOSE, quantile, median, stOf, tokenize, fmtT};
+    buildAIPrompt, normalizeAI, finalScores, AI_SCHEMA, AXES, F, CONTOUR_KO, AUD, PURPOSE, quantile, median, stOf, tokenize, fmtT};
 })();
 // CORE-END
 
@@ -1290,7 +1340,7 @@ const store={
   set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } },
   del(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
-const DEF_SETTINGS={provider:'openai', oaKey:'', oaModel:'', oaStt:'gpt-4o-transcribe', oaVoice:'coral', stt:'openai', apiKey:'', model:'claude-opus-5-5', effort:'medium', mode:'auto', hints:true, vibrate:false, countdown:true, autoAI:true};
+const DEF_SETTINGS={provider:'openai', oaKey:'', oaModel:'', oaStt:'gpt-transcribe', oaTts:'gpt-4o-mini-tts', oaVoice:'coral', stt:'openai', apiKey:'', model:'claude-opus-5-5', effort:'medium', mode:'auto', hints:true, vibrate:false, countdown:true, autoAI:true};
 const DEF_CTX={audience:'exec', purpose:'decision', target:120, lang:'ko-KR', key:'', ask:'', script:''};
 const S={
   settings:{...DEF_SETTINGS, ...store.get('bc.settings',{})},
@@ -1904,18 +1954,41 @@ function pickOAModel(ids){
   for(const p of ['gpt-4.1','gpt-4o']) if(ids.includes(p)) return p;
   return ids.find(id=>/^gpt-/.test(id))||'';
 }
+const STT_DEFAULT=['gpt-transcribe','gpt-4o-transcribe','gpt-4o-mini-transcribe','whisper-1'];
+const TTS_DEFAULT=['gpt-4o-mini-tts','tts-1-hd','tts-1'];
+function pickStt(list){ if(list.includes('gpt-transcribe')) return 'gpt-transcribe'; return list.find(id=>id!=='whisper-1') || list[0] || 'gpt-transcribe'; }
+function pickTts(list){ return list.find(id=>/^gpt-.*tts/.test(id)) || list[0] || 'gpt-4o-mini-tts'; }
+const STT_NOTE={'gpt-transcribe':'최신', 'gpt-4o-mini-transcribe':'저렴', 'whisper-1':'문장 시간 정보'};
+const TTS_NOTE={'tts-1':'낭독 지시 없음', 'tts-1-hd':'낭독 지시 없음'};
+function fillOneSelect(sel, list, cur, pick, notes){
+  const opts=[...new Set([...list, cur].filter(Boolean))];
+  sel.innerHTML=opts.map(m=>{ const n=[m===pick?'권장':'', notes[m]||''].filter(Boolean).join(' · '); return `<option value="${esc(m)}">${esc(m)}${n?` (${esc(n)})`:''}</option>`; }).join('');
+  sel.value=cur||pick;
+}
 function fillModelSelect(){
   const sel=$('setOaModel'); const list=store.get('bc.oaModels',[]); const cur=S.settings.oaModel;
   const opts=[...new Set([cur, ...list].filter(Boolean))];
   sel.innerHTML= opts.length? opts.map(m=>`<option value="${esc(m)}">${esc(m)}${m===pickOAModel(list)?' (권장)':''}</option>`).join('') : '<option value="">연결 확인 후 자동 선택</option>';
   sel.value=cur||'';
+  const stt=store.get('bc.oaStt',null)||STT_DEFAULT, tts=store.get('bc.oaTts',null)||TTS_DEFAULT;
+  fillOneSelect($('setOaStt'), stt, S.settings.oaStt, pickStt(stt), STT_NOTE);
+  fillOneSelect($('setOaTts'), tts, S.settings.oaTts, pickTts(tts), TTS_NOTE);
 }
 async function loadOAModels(){
   const res=await oaFetch('/models'); const j=await res.json();
-  const ids=(j.data||[]).map(m=>m.id); const chat=chatModels(ids);
-  store.set('bc.oaModels', chat);
-  if(!S.settings.oaModel || !ids.includes(S.settings.oaModel)){ S.settings.oaModel=pickOAModel(chat.length? chat : ids); saveSettings(); }
-  fillModelSelect();
+  const all=(j.data||[]).map(m=>({id:String(m.id), created:+m.created||0}));
+  const ids=all.map(m=>m.id); const chat=chatModels(ids);
+  const newest=(a,b)=> b.created-a.created || (a.id<b.id? 1:-1);
+  const stt=all.filter(m=>/transcribe/.test(m.id) && !/(diarize|live|realtime)/.test(m.id)).sort(newest).map(m=>m.id);
+  if(ids.includes('whisper-1')) stt.push('whisper-1');
+  const tts=all.filter(m=>/tts/.test(m.id) && !/realtime/.test(m.id)).sort(newest).map(m=>m.id);
+  store.set('bc.oaModels', chat); store.set('bc.oaStt', stt); store.set('bc.oaTts', tts);
+  // follow the newest model unless the user picked one by hand (and it is still available)
+  const pin=S.settings.pinned||{};
+  if(!pin.model || !ids.includes(S.settings.oaModel)) S.settings.oaModel=pickOAModel(chat.length? chat : ids);
+  if(stt.length && (!pin.stt || !stt.includes(S.settings.oaStt))) S.settings.oaStt=pickStt(stt);
+  if(tts.length && (!pin.tts || !tts.includes(S.settings.oaTts))) S.settings.oaTts=pickTts(tts);
+  saveSettings(); fillModelSelect();
   return chat;
 }
 async function ensureOAModel(){ if(S.settings.oaModel) return S.settings.oaModel; await loadOAModels(); if(!S.settings.oaModel) throw {code:'model_missing'}; return S.settings.oaModel; }
@@ -1947,16 +2020,37 @@ function sttPrompt(ctx, model){
   return en? `Executive briefing rehearsal. Transcribe verbatim, keeping fillers such as um, uh, like, you know, and repetitions. End sentences with periods.${terms?' Terms: '+terms:''}`
     : `임원 보고 리허설 녹음입니다. 음, 어, 그, 이제, 좀 같은 군말과 반복도 빼지 말고 말한 그대로 적습니다. 문장이 끝나면 마침표를 찍습니다.${terms?' 자주 나오는 말: '+terms:''}`;
 }
-async function transcribeOpenAI(blob, ctx, signal){
-  const model=S.settings.oaStt||'gpt-4o-transcribe';
-  const f=asUpload(blob); if(f.size>25*1048576) throw {code:'too_large'};
+async function transcribeWith(model, f, ctx, signal, withPrompt){
   const fd=new FormData();
-  fd.append('file', f); fd.append('model', model); fd.append('language', String(ctx.lang||'').startsWith('en')?'en':'ko'); fd.append('prompt', sttPrompt(ctx, model));
+  fd.append('file', f); fd.append('model', model); fd.append('language', String(ctx.lang||'').startsWith('en')?'en':'ko');
+  if(withPrompt) fd.append('prompt', sttPrompt(ctx, model));
+  // gpt-transcribe and gpt-4o-* return json only; whisper-1 also gives sentence timestamps
   if(model==='whisper-1'){ fd.append('response_format','verbose_json'); fd.append('timestamp_granularities[]','segment'); }
   else fd.append('response_format','json');
   const res=await oaFetch('/audio/transcriptions',{method:'POST', body:fd, signal});
   const j=await res.json();
-  return {text:String(j.text||'').trim(), segments: Array.isArray(j.segments)? j.segments.map(x=>({text:String(x.text||'').trim(), start:+x.start||0, end:+x.end||0})).filter(x=>x.text) : null};
+  return {model, text:String(j.text||'').trim(), segments: Array.isArray(j.segments)? j.segments.map(x=>({text:String(x.text||'').trim(), start:+x.start||0, end:+x.end||0})).filter(x=>x.text) : null};
+}
+async function transcribeOpenAI(blob, ctx, signal){
+  const f=asUpload(blob); if(f.size>25*1048576) throw {code:'too_large'};
+  const first=S.settings.oaStt||'gpt-transcribe';
+  const models=[first, ...['gpt-transcribe','gpt-4o-transcribe'].filter(m=>m!==first)];
+  let lastErr=null;
+  for(const model of models){
+    try{
+      let r;
+      try{ r=await transcribeWith(model, f, ctx, signal, true); }
+      catch(e){ if(e && e.code==='bad_request' && /prompt/i.test(e.message||'')) r=await transcribeWith(model, f, ctx, signal, false); else throw e; }
+      // the key could not use the chosen model: remember the one that worked
+      if(model!==first){ S.settings.oaStt=model; saveSettings(); fillModelSelect(); toast(`이 키로는 ${first}를 쓸 수 없어 ${model}로 받아 적었습니다.`); }
+      return r;
+    }catch(e){
+      lastErr=e;
+      const modelProblem= e && (e.code==='model_missing' || (e.code==='bad_request' && /model/i.test(e.message||'')));
+      if(!modelProblem) throw e;
+    }
+  }
+  throw lastErr;
 }
 const pendingSTT={};
 async function transcribeAttempt(att){
@@ -1972,7 +2066,7 @@ async function transcribeAttempt(att){
     const pros=BC.prosodyStage(p.tracker, segs, p.duration);
     att.pros=pros; att.texts=pros.units.map(u=>u.text); att.contentText=null;
     att.ev=BC.evaluate(pros, att.texts, att.ctx, att.ctx.lang, {kind:'speech'});
-    att.stt={state:'done', model:S.settings.oaStt};
+    att.stt={state:'done', model:res.model};
     delete pendingSTT[att.id];
   }catch(e){
     att.stt={state:'error', msg: errText(e)||'받아 적지 못했습니다.'};
@@ -1997,7 +2091,7 @@ async function speakOpenAI(marked, btn){
   if(ttsAudio && !ttsAudio.paused && ttsBtn && ttsBtn===btn){ ttsAudio.pause(); resetTtsBtn(); return; }
   if(ttsAudio) ttsAudio.pause(); resetTtsBtn();
   const {text, stress}=BC.toSpeechText(marked); if(!text) return;
-  const voice=S.settings.oaVoice||'coral', key=voice+'|'+S.ctx.lang+'|'+text;
+  const voice=S.settings.oaVoice||'coral', ttsModel=S.settings.oaTts||'gpt-4o-mini-tts', key=ttsModel+'|'+voice+'|'+S.ctx.lang+'|'+text;
   const audio=ttsAudio||(ttsAudio=new Audio());
   try{ audio.src=SILENT; const pp=audio.play(); if(pp) pp.catch(()=>{}); }catch(e){}
   ttsBtn=btn||null;
@@ -2005,7 +2099,10 @@ async function speakOpenAI(marked, btn){
   try{
     let url=ttsCache.get(key);
     if(!url){
-      const res=await oaFetch('/audio/speech',{method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({model:'gpt-4o-mini-tts', voice, input:text.slice(0,4000), instructions:ttsInstructions(stress, S.ctx.lang), response_format:'mp3'})});
+      const body=m=>{ const b={model:m, voice, input:text.slice(0,4000), response_format:'mp3'}; if(!/^tts-1/.test(m)) b.instructions=ttsInstructions(stress, S.ctx.lang); return JSON.stringify(b); };
+      let res;
+      try{ res=await oaFetch('/audio/speech',{method:'POST', headers:{'content-type':'application/json'}, body:body(ttsModel)}); }
+      catch(e){ if(ttsModel!=='gpt-4o-mini-tts' && e && (e.code==='model_missing' || (e.code==='bad_request' && /model/i.test(e.message||'')))) res=await oaFetch('/audio/speech',{method:'POST', headers:{'content-type':'application/json'}, body:body('gpt-4o-mini-tts')}); else throw e; }
       url=URL.createObjectURL(await res.blob()); ttsCache.set(key,url);
     }
     audio.onended=()=>resetTtsBtn();
@@ -2081,18 +2178,30 @@ function renderReview(){
   if(!att) return;
   S.viewId=att.id;
   const ev=att.ev, m=ev.m, prev=previousOf(att);
-  const v=ev.overall; const C=2*Math.PI*40;
+  const fs=BC.finalScores(ev, att.ai);
+  const v=fs.overall; const C=2*Math.PI*40;
   $('scoreRing').innerHTML=`<svg viewBox="0 0 92 92"><circle cx="46" cy="46" r="40" fill="none" stroke="var(--sunken)" stroke-width="8"/><circle cx="46" cy="46" r="40" fill="none" stroke="var(--${v==null?'ink-3':band(v)})" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-(v||0)/100)}"/></svg><div class="val">${v??'–'}</div>`;
   $('scoreGrade').textContent=gradeText(v);
   const src= att.kind==='script'? '원고 점검' : att.source==='file'? `녹음 파일${att.fileName?' · '+att.fileName:''}` : '실시간 연습';
-  $('scoreMeta').textContent=`${att.kind==='script'?'원고':'시도'} #${attNo(att)} · ${new Date(att.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${fmt(m.duration)}${m.durEst?' 예상':''} · ${src}`;
+  const sttModel= att.stt && att.stt.state==='done' && att.stt.model? ` · ${att.stt.model}` : '';
+  $('scoreMeta').textContent=`${att.kind==='script'?'원고':'시도'} #${attNo(att)} · ${new Date(att.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})} · ${fmt(m.duration)}${m.durEst?' 예상':''} · ${src}${sttModel}`;
+  $('scoreWhy').textContent=fs.overallReason||'';
   renderSttStatus(att);
-  const cmp=BC.compare(prev? prev.ev:null, ev);
+  const cmp=BC.compare(prev? prev.ev:null, ev, prev? BC.finalScores(prev.ev, prev.ai):null, fs);
   $('scoreAxes').innerHTML=AXIS_ORDER.map(k=>{
-    const s=ev.scores[k]; const d=cmp && cmp.axes[k]!=null && cmp.axes[k]!==0? `<span class="${cmp.axes[k]>0?'chip good':'chip bad'} mono">${cmp.axes[k]>0?'▲':'▼'}${Math.abs(cmp.axes[k])}</span>`:'';
-    if(s==null){ const why= k==='delivery'? (att.kind==='script'?'말한 뒤 측정':'억양 측정 없음') : k==='pace'? (att.kind==='script'?'말한 뒤 측정':'측정 안 됨') : '내용 없음'; return `<div class="axis"><span>${BC.AXES[k]}</span><div class="bar"></div><span class="na">${why}</span></div>`; }
-    return `<div class="axis"><span>${BC.AXES[k]}</span><div class="bar"><i style="width:${s}%;background:var(--${band(s)})"></i></div><span class="v">${s} ${d}</span></div>`;
+    const a=fs.axes[k]; const s=a.final;
+    const d=cmp && cmp.axes[k]!=null && cmp.axes[k]!==0? `<span class="${cmp.axes[k]>0?'chip good':'chip bad'} mono">${cmp.axes[k]>0?'▲':'▼'}${Math.abs(cmp.axes[k])}</span>`:'';
+    if(s==null) return `<div class="axis"><span>${BC.AXES[k]}</span><div class="bar"></div><span class="na">–</span><div class="why"><b>측정</b><span>${esc(a.reason)}</span></div></div>`;
+    const lines= a.ai!=null
+      ? `<div class="why"><b>측정 ${a.measured}</b><span>${esc(a.reason)}</span></div><div class="why ai"><b>AI ${a.ai}</b><span>${esc(a.aiReason||'근거 없음')}</span></div>`
+      : `<div class="why"><b>측정</b><span>${esc(a.reason)}</span></div>`;
+    return `<div class="axis"><span>${BC.AXES[k]}</span><div class="bar"><i style="width:${s}%;background:var(--${band(s)})"></i></div><span class="v">${s} ${d}</span>${lines}</div>`;
   }).join('');
+  const aiPending= AIJOB && AIJOB.id===att.id || (att.stt && att.stt.state==='running');
+  $('blendNote').textContent= fs.blended
+    ? '최종 점수 = 기기 측정과 AI 판단을 축마다 섞은 값 (측정:AI — 구조 4:6 · 억양 7:3 · 속도 8:2 · 언어 5:5). 종합 = 구조 30% · 억양 30% · 속도 20% · 언어 20%.'
+    : aiPending? '기기 측정 점수입니다. AI 심층 분석이 끝나면 축마다 AI 판단을 섞어 최종 점수를 다시 매깁니다.'
+    : '기기 측정만 반영한 점수입니다. AI 피드백을 받으면 축마다 AI 판단을 섞어 최종 점수를 다시 매깁니다.';
   // comparison
   const cc=$('compareCard');
   if(cmp && (cmp.items.length || cmp.delta!=null)){
@@ -2267,12 +2376,12 @@ function renderLog(){
   $('attList').innerHTML= list.length? [...list].reverse().map(a=>{
     const f= a.ai && a.ai.focus.length? a.ai.focus[0].title : a.ev.findings[0]? a.ev.findings[0].title : '큰 문제 없음';
     const label= a.kind==='script'? '원고 점검' : a.source==='file'? '녹음 파일' : '실시간';
-    return `<button class="att" type="button" data-id="${esc(a.id)}"><span class="n">${a.kind==='script'?'원고':'#'+attNo(a)}</span><span><span class="t">${esc(f)}</span><br><span class="s">${label} · ${fmt(a.ev.m.duration)} · ${new Date(a.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span></span><span class="sc">${a.ev.overall??'–'}</span></button>`;
+    return `<button class="att" type="button" data-id="${esc(a.id)}"><span class="n">${a.kind==='script'?'원고':'#'+attNo(a)}</span><span><span class="t">${esc(f)}</span><br><span class="s">${label} · ${fmt(a.ev.m.duration)} · ${new Date(a.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</span></span><span class="sc">${BC.finalScores(a.ev,a.ai).overall??'–'}</span></button>`;
   }).join('') : '<p class="muted">아직 기록이 없습니다.</p>';
   $('attList').querySelectorAll('.att').forEach(b=>b.onclick=()=>{ S.viewId=b.dataset.id; go('review'); });
   const sp=speechAttempts();
   $('trendCard').hidden= sp.length<1;
-  if(sp.length){ const f=sp[0].ev.overall, l=sp[sp.length-1].ev.overall; $('trendSummary').textContent= sp.length>1 && f!=null && l!=null? `${f} → ${l}점 (${sp.length}회)` : `${sp.length}회`; requestAnimationFrame(()=>drawTrend(sp)); }
+  if(sp.length){ const f=BC.finalScores(sp[0].ev,sp[0].ai).overall, l=BC.finalScores(sp[sp.length-1].ev,sp[sp.length-1].ai).overall; $('trendSummary').textContent= sp.length>1 && f!=null && l!=null? `${f} → ${l}점 (${sp.length}회)` : `${sp.length}회`; requestAnimationFrame(()=>drawTrend(sp)); }
 }
 function drawTrend(sp){
   const cv=$('trendCanvas'); const {ctx,W,H,dpr}=fitCanvas(cv,150); ctx.clearRect(0,0,W,H);
@@ -2282,7 +2391,8 @@ function drawTrend(sp){
   ctx.font=`${11*dpr}px ${cssVar('--f-mono')}`; ctx.fillStyle=ink3; ctx.textAlign='right'; ctx.strokeStyle=line; ctx.lineWidth=dpr;
   for(const v of [0,50,100]){ ctx.beginPath(); ctx.moveTo(L,y(v)); ctx.lineTo(W-Rr,y(v)); ctx.stroke(); ctx.fillText(String(v), L-6*dpr, y(v)+4*dpr); }
   ctx.textAlign='center'; sp.forEach((a,i)=>ctx.fillText('#'+(i+1), x(i), H-6*dpr));
-  const series=[['--stress',a=>a.ev.scores.delivery,1.5],['--good',a=>a.ev.scores.structure,1.5],['--accent',a=>a.ev.overall,3]];
+  const fin=a=>BC.finalScores(a.ev,a.ai);
+  const series=[['--stress',a=>fin(a).axes.delivery.final,1.5],['--good',a=>fin(a).axes.structure.final,1.5],['--accent',a=>fin(a).overall,3]];
   for(const [col,get,w] of series){
     const c=cssVar(col); ctx.strokeStyle=c; ctx.fillStyle=c; ctx.lineWidth=w*dpr; ctx.beginPath(); let pen=false;
     sp.forEach((a,i)=>{ const v=get(a); if(v==null){ pen=false; return; } if(!pen){ ctx.moveTo(x(i),y(v)); pen=true; } else ctx.lineTo(x(i),y(v)); }); ctx.stroke();
@@ -2372,11 +2482,11 @@ function deviceCheckOA(btn){
     probe.detach(); try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){} try{ ac && ac.close(); }catch(e){}
     const mic=probe.stats();
     const pitch= mic.f0.length? ` · 평소 음높이 약 ${Math.round(BC.median(mic.f0))}Hz` : '';
-    let text='', err='';
-    if(blob && blob.size){ checkStatus('2/2 · OpenAI로 받아 적는 중…'); try{ text=(await transcribeOpenAI(blob, S.ctx)).text; }catch(e){ err=errText(e)||'받아 적지 못했습니다.'; } }
+    let text='', err='', used='';
+    if(blob && blob.size){ checkStatus('2/2 · OpenAI로 받아 적는 중…'); try{ const r=await transcribeOpenAI(blob, S.ctx); text=r.text; used=r.model; }catch(e){ err=errText(e)||'받아 적지 못했습니다.'; } }
     else err='이 브라우저에서 녹음 파일을 만들지 못했습니다.';
     let msg, tone;
-    if(mic.ok && text){ msg=`모두 정상입니다. 억양 분석과 OpenAI 받아 적기를 함께 씁니다 (들린 말: "${text.slice(0,40)}"${pitch}).`; tone='good'; S.settings.mode='auto'; S.settings.checked=Date.now(); saveSettings(); }
+    if(mic.ok && text){ msg=`모두 정상입니다. 억양 분석과 OpenAI 받아 적기(${used})를 함께 씁니다 (들린 말: "${text.slice(0,40)}"${pitch}).`; tone='good'; S.settings.mode='auto'; S.settings.checked=Date.now(); saveSettings(); }
     else if(mic.ok){ msg=`억양 분석은 정상이지만 OpenAI 받아 적기가 실패했습니다: ${err||'말소리를 찾지 못했습니다.'}${pitch}`; tone='warn'; }
     else if(text){ msg=`받아 적기는 되지만(들린 말: "${text.slice(0,30)}") 억양 분석용 소리가 약합니다(최대 ${Math.round(mic.maxDb)}dB). 휴대폰을 입에서 한 뼘 거리에 두고 다시 점검해 보세요.`; tone='warn'; }
     else { msg=`목소리가 들리지 않았습니다. 말하면서 다시 점검해 주세요.${err? ' ('+err+')':''}`; tone='bad'; }
@@ -2389,7 +2499,7 @@ function deviceCheckOA(btn){
 function renderSettings(){
   const st=S.settings;
   $('setKey').value=st.apiKey||''; $('setModel').value=st.model; $('setEffort').value=st.effort; $('setEffortOa').value=st.effort;
-  $('setOaKey').value=st.oaKey||''; $('setOaStt').value=st.oaStt; $('setOaVoice').value=st.oaVoice; fillModelSelect();
+  $('setOaKey').value=st.oaKey||''; $('setOaVoice').value=st.oaVoice; fillModelSelect();
   document.querySelectorAll('input[name=provider]').forEach(r=>{ r.checked= r.value===st.provider; });
   document.querySelectorAll('input[name=stt]').forEach(r=>{ r.checked= r.value===st.stt; });
   $('oaBlock').hidden= st.provider!=='openai'; $('clBlock').hidden= st.provider!=='claude';
@@ -2407,21 +2517,23 @@ $('setKey').addEventListener('change',e=>{ S.settings.apiKey=e.target.value.trim
 $('setModel').addEventListener('change',e=>{ S.settings.model=e.target.value; saveSettings(); });
 $('setEffort').addEventListener('change',e=>{ S.settings.effort=e.target.value; saveSettings(); });
 $('setEffortOa').addEventListener('change',e=>{ S.settings.effort=e.target.value; saveSettings(); });
-$('setOaKey').addEventListener('change',e=>{ const k=e.target.value.trim(); if(k!==S.settings.oaKey){ S.settings.oaKey=k; S.settings.oaModel=''; store.del('bc.oaModels'); } saveSettings(); fillModelSelect(); refreshEnv(); $('oaStatus').textContent= k? '저장했습니다. 연결 확인을 눌러 주세요.':''; });
-$('setOaModel').addEventListener('change',e=>{ S.settings.oaModel=e.target.value; saveSettings(); });
-$('setOaStt').addEventListener('change',e=>{ S.settings.oaStt=e.target.value; saveSettings(); });
+$('setOaKey').addEventListener('change',e=>{ const k=e.target.value.trim(); if(k!==S.settings.oaKey){ S.settings.oaKey=k; S.settings.oaModel=''; S.settings.pinned={}; store.del('bc.oaModels'); } saveSettings(); fillModelSelect(); refreshEnv(); $('oaStatus').textContent= k? '저장했습니다. 연결 확인을 눌러 주세요.':''; });
+const pinModel=k=>{ S.settings.pinned={...(S.settings.pinned||{}), [k]:true}; };
+$('setOaModel').addEventListener('change',e=>{ S.settings.oaModel=e.target.value; pinModel('model'); saveSettings(); });
+$('setOaStt').addEventListener('change',e=>{ S.settings.oaStt=e.target.value; pinModel('stt'); saveSettings(); });
 $('setOaVoice').addEventListener('change',e=>{ S.settings.oaVoice=e.target.value; saveSettings(); });
+$('setOaTts').addEventListener('change',e=>{ S.settings.oaTts=e.target.value; pinModel('tts'); saveSettings(); });
 document.querySelectorAll('input[name=provider]').forEach(r=>r.addEventListener('change',e=>{ if(e.target.checked){ S.settings.provider=e.target.value; saveSettings(); renderSettings(); } }));
 document.querySelectorAll('input[name=stt]').forEach(r=>r.addEventListener('change',e=>{ if(e.target.checked){ S.settings.stt=e.target.value; saveSettings(); refreshEnv(); if(e.target.value==='openai' && !oaKey()) checkStatus('OpenAI 받아 적기를 쓰려면 위에 OpenAI API 키를 넣어 주세요. 그 전까지는 브라우저 받아 적기를 씁니다.','warn'); } }));
 $('btnTestOa').addEventListener('click',async()=>{
   const k=$('setOaKey').value.trim(); const os=$('oaStatus');
-  if(k!==S.settings.oaKey){ S.settings.oaKey=k; S.settings.oaModel=''; store.del('bc.oaModels'); saveSettings(); }
+  if(k!==S.settings.oaKey){ S.settings.oaKey=k; S.settings.oaModel=''; S.settings.pinned={}; store.del('bc.oaModels'); saveSettings(); }
   refreshEnv(); if(!k){ os.textContent='키를 먼저 넣어 주세요.'; return; }
   os.textContent='확인 중…'; $('btnTestOa').disabled=true;
   try{
     const chat=await loadOAModels();
     const ids=store.get('bc.oaModels',[]);
-    os.textContent=`연결됐습니다. 코칭 모델: ${S.settings.oaModel||'없음'}${chat.length?` (쓸 수 있는 모델 ${chat.length}개)`:''}.`;
+    os.textContent=`연결됐습니다. 코칭 ${S.settings.oaModel||'없음'} · 받아 적기 ${S.settings.oaStt} · 낭독 ${S.settings.oaTts}.`;
     if(!ids.length) os.textContent+=' 대화형 모델이 보이지 않습니다. 키의 권한(Models 읽기)을 확인해 주세요.';
   }catch(e){ os.textContent=errText(e)||'연결하지 못했습니다.'; }
   finally{ $('btnTestOa').disabled=false; refreshEnv(); }
@@ -2442,6 +2554,7 @@ if(isTest){
 }
 
 /* ---------- boot ---------- */
+if(!S.settings.sttV2){ if(S.settings.oaStt==='gpt-4o-transcribe') S.settings.oaStt='gpt-transcribe'; S.settings.sttV2=true; saveSettings(); }
 for(const a of S.attempts) if(a.stt && a.stt.state==='running') a.stt={state:'error', msg:'화면을 다시 열면서 받아 적기가 중단됐습니다. 아래 "받아 적은 내용 고치기"에 직접 적을 수 있습니다.'};
 bindResetButtons(); updateBadge(); renderSettings();
 show();

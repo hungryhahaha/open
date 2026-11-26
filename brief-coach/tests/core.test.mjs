@@ -195,6 +195,30 @@ test('markup becomes speakable text with stress words for TTS', () => {
   assert.deepEqual(stress, ['18억 원', '세 가지']);
 });
 
+test('final score blends device measurement with the AI score per axis and keeps the reasons', () => {
+  const ctx = { purpose: 'decision', target: 120, key: '', ask: '' };
+  const ev = BC.evaluate(null, ['결론부터 말씀드리면 매출이 12% 줄었습니다', '다음 주까지 가격 조정을 승인해 주십시오'], ctx, 'ko-KR', { kind: 'script' });
+  assert.match(ev.reasons.structure, /결론 먼저 O/);
+  assert.match(ev.reasons.structure, /마지막 요청 O/);
+  assert.match(ev.reasons.delivery, /말한 뒤/);
+  const ai = BC.normalizeAI({ scores: { structure: { score: 90, reason: '결론과 요청이 분명' }, delivery: { score: 80, reason: 'x' }, pace: { score: null, reason: '' }, language: { score: '70', reason: '단정형' } }, overall_reason: '구조가 탄탄함' });
+  const fs = BC.finalScores(ev, ai);
+  assert.equal(fs.axes.structure.final, Math.round(0.4 * ev.scores.structure + 0.6 * 90));
+  assert.equal(fs.axes.structure.aiReason, '결론과 요청이 분명');
+  assert.equal(fs.axes.delivery.final, null, 'no measurement: the AI score is not used');
+  assert.equal(fs.axes.language.ai, 70);
+  assert.equal(fs.overallReason, '구조가 탄탄함');
+  assert.ok(fs.blended);
+  const plain = BC.finalScores(ev, null);
+  assert.equal(plain.overall, ev.overall);
+  assert.equal(plain.blended, false);
+  // out-of-range AI scores are clamped
+  assert.equal(BC.normalizeAI({ scores: { structure: { score: 140, reason: '' } } }).scores.structure.score, 100);
+  // comparison deltas follow the final scores
+  const cmp = BC.compare(ev, ev, plain, fs);
+  assert.equal(cmp.delta, fs.overall - plain.overall);
+});
+
 test('AI prompt and schema are well formed', () => {
   const walk = (s, path = 'root') => {
     if (s.type === 'object') {
