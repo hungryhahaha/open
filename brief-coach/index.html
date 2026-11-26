@@ -247,7 +247,8 @@ ol.focus{list-style:none;counter-reset:f;margin:0;padding:0;display:flex;flex-di
 ol.focus>li{counter-increment:f;display:grid;grid-template-columns:30px 1fr;gap:4px 10px}
 ol.focus>li::before{content:counter(f);grid-row:span 5;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-family:var(--f-mono);font-weight:600;font-size:13px}
 .f-title{font-weight:700;font-size:15.5px;line-height:1.4}
-.f-ev{font-size:12.5px;color:var(--ink-3);font-family:var(--f-mono);overflow-wrap:anywhere}
+.f-ev{font-size:13px;line-height:1.55;color:var(--ink-2);overflow-wrap:anywhere}
+.f-ev b{font-size:11.5px;font-weight:700;color:var(--bad);margin-right:6px}
 .f-why{font-size:14px;color:var(--ink-2)}
 .f-how{font-size:14.5px}
 .f-drill{font-size:13.5px;background:var(--surface-2);border-radius:8px;padding:8px 10px}
@@ -364,14 +365,16 @@ textarea.edit{min-height:180px;font-size:14.5px}
     </details>
 
     <details class="card fold">
-      <summary><h3>30초 브리프 뼈대</h3><span class="hint">임원이 언제 말을 끊어도 핵심이 남는 순서</span></summary>
+      <summary><h3>30초 브리프 뼈대</h3><span class="hint">임원이 첫 30초 안에 무슨 건이고 결론이 무엇인지 알 수 있는 순서</span></summary>
       <div class="fold-body">
         <ol class="frame">
-          <li><b>결론</b><q>결론부터 말씀드리면, ○○입니다.</q></li>
+          <li><b>무슨 건인지 <em>· 필요할 때만 1~2문장</em></b><q>지난주 말씀하신 ○○사 AX 점검 건입니다.</q></li>
+          <li><b>결론</b><q>점검해 보니 AI 성과로 보고된 효과의 대부분은 기존 설비 개선 효과였습니다.</q></li>
           <li><b>이유 세 가지 (숫자로)</b><q>이유는 세 가지입니다. 첫째, 비용이 연 18억 원 줄어듭니다…</q></li>
           <li><b>리스크와 대응</b><q>우려되는 점은 △△이고, □□로 대응하겠습니다.</q></li>
           <li><b>요청</b><q>다음 주 금요일까지 착수를 승인해 주십시오.</q></li>
         </ol>
+        <p class="small">경위나 진행 과정은 결론 뒤에 두세요. 나쁜 소식이나 시연처럼 맥락이 길어야 할 때는 처음에 "결론은 ○○이고, 이유를 보여 드리겠습니다"라고 먼저 예고하면 됩니다.</p>
       </div>
     </details>
 
@@ -810,7 +813,6 @@ const BC = (() => {
     ko:{
       fillers:new Set(['어','음','아','에','엄','뭐','이제','좀','약간','그냥','사실','일단','막','되게','진짜','뭐랄까','그러니까','그니까','저기']),
       hedgeRe:/것\s?같(?:습니다|아요|은데|고|네요|다)|듯(?:합니다|해요|하고|싶|이|한데)|아마(?:도)?|않을까|생각(?:됩니다|이\s?듭니다)|혹시|어느\s?정도|나름(?:대로)?|할\s?수도|일\s?수도|보여\s?집니다/g,
-      bluf:/결론|요청|승인|결정|제안|핵심은|핵심만|말씀드리(?:면|겠)|보고\s?드리|드리고자|필요합니다|하겠습니다|부탁|권고|권장|추천|요약하면|한\s?마디로|정리하면/,
       ask:/승인|결정|부탁|요청|검토\s?(?:해|를|부탁)|지원|의견|해\s?주시|주십시오|필요합니다|컨펌|확정|허락|재가|결재/,
       signpost:/첫째|첫\s?번째|둘째|두\s?번째|셋째|세\s?번째|세\s?가지|두\s?가지|네\s?가지|다음으로|마지막으로/,
       risk:/리스크|위험|우려|이슈|대응|대안|완화|플랜\s?[bB비]|문제점|부작용/,
@@ -820,7 +822,6 @@ const BC = (() => {
     en:{
       fillers:new Set(['um','uh','er','ah','erm','hmm','like','basically','actually','literally']),
       hedgeRe:/\b(?:i think|i guess|i feel like|i believe|maybe|probably|perhaps|kind of|sort of|hopefully|might|could be|a little bit|somewhat)\b/gi,
-      bluf:/\b(?:recommend|recommendation|propose|proposal|ask|request|decision|approve|approval|bottom line|in short|the key|conclusion|we should|we need)\b/i,
       ask:/\b(?:approve|approval|decide|decision|ask|request|need your|support|sign[- ]?off|green ?light|budget)\b/i,
       signpost:/\b(?:first|second|third|firstly|secondly|finally|three (?:reasons|points|things)|two (?:reasons|points|things))\b/i,
       risk:/\b(?:risk|risks|concern|concerns|mitigat\w*|downside|contingency|plan b|issue)\b/i,
@@ -866,10 +867,85 @@ const BC = (() => {
     return [...set].sort((a,b)=>a-b);
   }
 
+  /* ---------- first 30 seconds: can the executive tell what this is about and what the conclusion is? ----------
+     Scope for a spoken brief: the first three sentences (capped near 30 s of speech for run-on text).
+     A conclusion stated in that scope passes, including a preview such as "결론은 ○○이고, 이유를 보여 드리겠습니다";
+     one or two sentences of context before it are fine. A narrated sequence of events that pushes the conclusion
+     out of scope, or context with no conclusion, is flagged. Not having the conclusion in the very first sentence is never flagged on its own. */
+  const F30={
+    ko:{
+      strong:/결론(?:은|부터|적으로|을\s?말씀드리면)|요약하면|핵심은|핵심만|한\s?마디로|정리하면|결과적으로|그\s?결과|요컨대|판단(?:합니다|됩니다|했습니다|하고)|권고(?:합니다|드립니다)|제안(?:합니다|드립니다)|승인(?:해|을)|요청(?:드립니다|합니다)|필요합니다|해야\s?합니다|하겠습니다|부탁(?:드립니다)?/,
+      weak:/보니|확인(?:했|됐|되었)|드러났|나타났|밝혀졌|대부분|절반|절감|증가|감소|개선(?:됩|됐|되었|할)|늘어|늘었|줄어|줄었|올랐|떨어졌|높아졌|낮아졌|빨라졌|느려졌|좋아졌|나빠졌|상승|하락|악화|달성|초과|미달|가능합니다|어렵습니다|불가능|문제(?:가|는)?\s?없|효과(?:였|입|가|는)/,
+      narr:/미팅|회의|만났|만나|방문|통화|인터뷰|진행했|진행하면서|했는데|었는데|았는데|였는데|했고요|었고요|았고요|받았고|처음에는|첫\s?(?:미팅|번째|회의|방문|주)|두\s?번째|세\s?번째|그\s?다음|그\s?후|이후에|지난\s?(?:주|달)(?:에|부터)|경위|순서대로|차례/,
+      ctx:/말씀하신|지시하신|요청하신|문의하신|건입니다|건으로|건\s?관련|관련해서|에\s?대해\s?(?:보고|말씀)|보고드리(?:겠|려)|공유드리(?:겠|려)|아시다시피|아시는|지난번/,
+      empty:/결론(?:을|은)\s?(?:나중에|뒤에|마지막에|끝에)|결론을\s?(?:말씀드리겠|드리겠)/
+    },
+    en:{
+      strong:/\b(?:bottom line|in short|in conclusion|to summarize|the key (?:point|finding) is|my recommendation|we recommend|i recommend|i propose|we propose|we need|i need your|we should|the answer is|the result is|what we found|as a result)\b/i,
+      weak:/\b(?:found|turned out|showed|most of|majority|saves?|increased?|decreased?|reduced?|improved?)\b/i,
+      narr:/\b(?:met with|meeting|meetings|visited|we called|first,? we|then we|after that|initially|last week we|second time|third time)\b/i,
+      ctx:/\b(?:as you asked|following up|regarding|this is about|you asked|update on)\b/i,
+      empty:/\b(?:conclusion (?:at the end|later)|i'?ll (?:share|give) (?:you )?the conclusion)\b/i
+    }
+  };
+  function spokenSentences(text){
+    const t=String(text||'').replace(/\s+/g,' ').trim(); if(!t) return [];
+    if(/[.?!。]/.test(t)) return splitSentences(t);
+    // transcripts without punctuation: break at spoken sentence endings
+    return t.replace(/(니다|니까|십시오|어요|아요|에요|예요|죠|고요|는데요|거든요|세요)\s+/g,'$1\n').split(/\n+/).map(x=>x.trim()).filter(Boolean);
+  }
+  function sentenceRole(s, L){
+    const R=F30[L];
+    if(R.empty.test(s)) return 'promise';
+    const strong=R.strong.test(s), weak=R.weak.test(s), narr=R.narr.test(s);
+    if(strong || (weak && !narr)) return 'conclusion';
+    if(narr) return 'narrative';
+    if(R.ctx.test(s)) return 'context';
+    return 'other';
+  }
+  function firstThirty(text, keyText, lang){
+    const L=String(lang||'ko').startsWith('en')?'en':'ko';
+    const S=spokenSentences(text);
+    if(!S.length) return {status:'na', problem:'', windowText:''};
+    const CAP= L==='ko'? 170 : 80;   // about 30-35 s of speech
+    const win=[]; let acc=0, cut=null;
+    for(let i=0;i<Math.min(3,S.length);i++){
+      const ws=tokenize(S[i]); const amt=ws.reduce((a,w)=>a+amountOf(w,L),0);
+      if(acc+amt<=CAP){ win.push(S[i]); acc+=amt; continue; }
+      let a2=acc; const keep=[];
+      for(const w of ws){ const x=amountOf(w,L); if(a2+x>CAP) break; keep.push(w); a2+=x; }
+      if(keep.length) win.push(keep.join(' '));
+      cut={i, rest:ws.slice(keep.length).join(' ')};
+      break;
+    }
+    const rest= cut? [cut.rest, ...S.slice(cut.i+1)].filter(Boolean) : S.slice(win.length);
+    const roles=win.map(x=>sentenceRole(x,L));
+    const keyKw=extractKeywords(keyText||'', L);
+    const cov=t=> keyKw.length>=2? keyKw.filter(k=>tokenize(t).some(w=>matchesKey(w,[k],L))).length/keyKw.length : null;
+    const winText=win.join(' ');
+    const covWin=cov(winText), covAll=cov(S.join(' '));
+    const conclIdx=roles.indexOf('conclusion');
+    const keyHere= covWin!=null && covWin>=0.5, keyLater= covAll!=null && covAll>=0.5;
+    let pass= conclIdx>=0 || keyHere, kind=null;
+    if(pass && keyLater && covWin<0.4){ pass=false; kind='different'; }
+    if(!pass && !kind) kind= roles.includes('narrative')? 'narrative' : 'context';
+    let actual='';
+    if(!pass){
+      if(keyLater){ let best='', bc=0; for(const x of rest){ const c=cov(x)||0; if(c>bc){ bc=c; best=x; } } actual= bc>=0.3? best : keyText; }
+      else actual= rest.find(x=>sentenceRole(x,L)==='conclusion') || '';
+    }
+    const q=(t,n)=>`"${trunc(t,n)}"`;
+    const gist= kind==='different'? q(win[conclIdx>=0?conclIdx:0],42)
+      : kind==='narrative'? `${q(win[0],30)} 등 진행 경위`
+      : `${q(win[0],30)} 등 맥락만 있고 결론이 없음`;
+    const problem= pass? '' : `30초 안에 전달되는 내용: ${gist} / 실제 결론: ${actual? q(actual,48) : '결론으로 볼 문장을 찾지 못했습니다'}`;
+    return {status: pass?'pass':'fail', kind, roles, windowText:winText, problem, conclusion: pass? win[conclIdx>=0?conclIdx:0] : actual};
+  }
+
   /* ---------- coaching catalog ---------- */
   const AXES={structure:'구조·메시지', delivery:'억양·강세', pace:'속도·쉼', language:'언어 습관'};
   const F={
-    no_bluf:{axis:'structure', title:'결론을 첫 문장으로', why:'임원은 처음 15~30초에 이 보고를 어떻게 들을지 정합니다. 배경부터 시작하면 핵심이 나오기 전에 질문이 끼어듭니다.', how:'"결론부터 말씀드리면, ○○입니다. 이유는 세 가지입니다."로 시작하세요. 배경은 결론 뒤에 한 문장이면 충분합니다.', drill:'첫 문장만 다섯 번 소리 내어 말해 보세요. 15초 안에 결론과 요청이 함께 나오면 통과입니다.'},
+    first30:{axis:'structure', title:'첫 30초 안에 결론까지', why:'임원은 첫 30초에 무슨 건이고 결론이 무엇인지 파악하려 합니다. 경위나 진행 과정이 앞에 길게 나오면 결론이 그 뒤로 밀려 들리지 않습니다.', how:'무슨 건인지, 왜 지금 보고하는지 같은 맥락은 1~2문장이면 충분합니다. 그다음 바로 결론을 말하고, 경위는 결론 뒤에 두세요. 나쁜 소식이나 시연처럼 맥락이 길어야 하면 처음에 "결론은 ○○이고, 이유를 보여 드리겠습니다"라고 먼저 예고하세요.', drill:'처음 세 문장만 말해 보세요. 듣는 사람이 "무슨 건이고 결론이 뭔지"를 한 문장으로 말할 수 있으면 통과입니다.'},
     no_ask:{axis:'structure', title:'마지막에 요청을 분명히', why:'1:1 보고의 목적은 결정이나 지원을 얻는 것입니다. 요청이 없으면 임원은 "그래서 내가 뭘 해 주면 되죠?"라고 되묻습니다.', how:'"○일까지 ○○을 승인해 주십시오. ↘"처럼 무엇을, 언제까지 원하는지 한 문장으로 닫으세요.', drill:'마지막 문장만 세 번. 끝을 내리고(↘) 1초 멈춘 뒤 임원의 반응을 기다리는 장면까지 연습하세요.'},
     key_missing:{axis:'structure', title:'준비한 결론을 그대로 말하기', why:'준비 화면에 적은 결론 메시지가 실제 발화에는 거의 나오지 않았습니다. 말하다 보면 핵심 문장이 풀어지기 쉽습니다.', how:'결론 문장은 외워서 토씨까지 그대로 말하세요. 나머지는 자유롭게 해도 됩니다.', drill:'결론 문장을 원고 없이 세 번 연속 같은 말로 말해 보세요.'},
     no_numbers:{axis:'structure', title:'근거를 숫자로', why:'숫자가 없는 근거는 의견으로 들립니다. 임원은 규모·비용·기간으로 판단합니다.', how:'효과·비용·일정 중 최소 두 가지를 숫자로 말하세요. 예: "연 18억 원 절감, 3개월 안에".', drill:'근거 문장마다 숫자를 하나씩 넣어 다시 말해 보세요. 숫자 앞에서는 반 박자 쉬기( | ).'},
@@ -892,10 +968,10 @@ const BC = (() => {
     open_endings:{axis:'language', title:'문장을 끝까지 닫기', why:'"~했는데…", "~하고…"로 끝나면 결론 없이 말이 흩어진 것처럼 들립니다.', how:'한 문장에 한 메시지를 담고 "~습니다."로 닫은 뒤 쉬세요.', drill:'열린 채로 끝난 문장에 서술어를 붙여 완결된 문장으로 다시 말해 보세요.'},
     runon:{axis:'language', title:'긴 문장 나누기', why:'한 문장에 메시지가 세 개 이상 들어가면 듣는 사람은 첫 번째를 잊어버립니다.', how:'"~는데", "~고"에서 끊고 문장을 둘로 나누세요.', drill:'가장 긴 문장을 두세 문장으로 쪼개 말해 보세요.'}
   };
-  const ORDER=['no_bluf','uptalk','trailing','no_ask','key_missing','hedges','fast','monotone','fillers','key_not_stressed','over_time','no_numbers','open_endings','no_pause','runon','yo_endings','slow','no_signpost','no_risk','over_emphasis','hesitation','too_short'];
+  const ORDER=['first30','uptalk','trailing','no_ask','key_missing','hedges','fast','monotone','fillers','key_not_stressed','over_time','no_numbers','open_endings','no_pause','runon','yo_endings','slow','no_signpost','no_risk','over_emphasis','hesitation','too_short'];
   const MEASURABLE={structure:m=>m.hasText, delivery:m=>m.hasPros, pace:m=>m.rate!=null||m.hasPros, language:m=>m.hasText};
   const BAD={
-    no_bluf:m=>m.bluf?0:1, no_ask:m=>m.ask?0:1, key_missing:m=>1-(m.keyCoverage??1), no_numbers:m=>m.numbers?0:1, no_signpost:m=>m.signpost?0:1, no_risk:m=>m.risk?0:1,
+    first30:m=> m.first30? (m.first30.status==='fail'?1:0) : (m.bluf?0:1), no_ask:m=>m.ask?0:1, key_missing:m=>1-(m.keyCoverage??1), no_numbers:m=>m.numbers?0:1, no_signpost:m=>m.signpost?0:1, no_risk:m=>m.risk?0:1,
     over_time:m=>m.target? Math.max(0,m.duration-m.target):0, too_short:m=>m.target? Math.max(0,m.target*0.4-m.duration):0,
     uptalk:m=>m.knownN? m.riseN/m.knownN:0, trailing:m=>m.prosUnits? m.trailN/m.prosUnits:0, monotone:m=>Math.max(0,5-(m.rangeSt??5)),
     key_not_stressed:m=>m.tgtTotal? 1-m.tgtHit/m.tgtTotal:0, over_emphasis:m=>m.peaksPerSec??0,
@@ -962,7 +1038,8 @@ const BC = (() => {
     const firstPart=words.filter((w,i)=>cumA[i]<=firstCut).join(' ');
     const lastPart=words.filter((w,i)=>cumA[i]>=tot*0.7).join(' ');
     const coverIn=t=>{ if(!keywords.length) return null; const ws=tokenize(t); return keywords.filter(k=>ws.some(w=>matchesKey(w,[k],L))).length/keywords.length; };
-    const keyCoverage=coverIn(contentText), keyFirst=coverIn(firstPart);
+    const keyCoverage=coverIn(contentText);
+    const f30= hasText? firstThirty(contentText, ctx.key||'', L) : {status:'na', problem:'', windowText:''};
     const m={
       kind, L, hasPros, hasText, contentFromScript:override, duration, durEst, eff, target, rate, rateEst, rateLo, rateHi, rateUnit: L==='ko'?'음절/분':'단어/분',
       pauseRatio: pros? pros.pauseRatio:null, longestRun: pros? pros.longestRun:null, meanRun: pros? pros.meanRun:null, longHes: pros? pros.longHes:0,
@@ -971,7 +1048,8 @@ const BC = (() => {
       fillerN, filled, fillerPerMin, fillerTop: Object.entries(fillerWords).sort((a,b)=>b[1]-a[1]).slice(0,3),
       hedgeN: hedgeList.length, hedgeList: [...new Set(hedgeList)].slice(0,4),
       closedN: closed.length, formalN, yoN, openN, runOnN,
-      bluf: hasText && (X.bluf.test(firstPart) || (keyFirst!=null && keyFirst>=0.5)),
+      first30:{status:f30.status, kind:f30.kind||null, problem:f30.problem, window:trunc(f30.windowText||'',220)},
+      bluf: f30.status==='pass',
       ask: hasText && X.ask.test(lastPart), signpost: X.signpost.test(contentText), risk: X.risk.test(contentText),
       numbers: full.numIdx.length, keyCoverage, amount: full.amount
     };
@@ -979,7 +1057,7 @@ const BC = (() => {
     const sc={structure:null, delivery:null, pace:null, language:null};
     const timeScore=()=>{ if(!target) return 10; const r=duration/target; if(r>=0.5 && r<=1.1) return 10; if(r<=1.3 && r>=0.35) return 6; if(r<=1.6) return 3; return 0; };
     if(hasText){
-      let s=0; s+= m.bluf?30:0; s+= m.numbers>=2?15: m.numbers===1?8:0; s+= m.signpost?15:0;
+      let s=0; s+= f30.status==='pass'?30:0; s+= m.numbers>=2?15: m.numbers===1?8:0; s+= m.signpost?15:0;
       s+= m.ask?20:(ctx.purpose==='share'?12:0); s+= m.risk?10:(ctx.purpose==='decision'?0:6); s+= timeScore();
       if(m.keyCoverage!=null && m.keyCoverage<0.4) s-=10;
       sc.structure=Math.round(clamp(s,0,100));
@@ -1012,7 +1090,7 @@ const BC = (() => {
     const sev={};
     const purpose=ctx.purpose||'decision';
     if(hasText){
-      if(!m.bluf) sev.no_bluf=3;
+      if(f30.status==='fail') sev.first30=3;
       if(!m.ask) sev.no_ask= purpose==='share'?1 : purpose==='issue'?2:3;
       if(m.keyCoverage!=null && m.keyCoverage<0.4 && kind!=='script') sev.key_missing=2;
       if(m.numbers===0) sev.no_numbers=2;
@@ -1039,7 +1117,7 @@ const BC = (() => {
     if(rate!=null){ const hi3= L==='ko'?360:180, lo3= L==='ko'?220:115; if(rate>hi3) sev.fast=3; else if(rate>rateHi) sev.fast=2; if(rate<lo3) sev.slow=2; else if(rate<rateLo-15) sev.slow=1; }
     const firstQuote=pred=>{ const u=units.find(pred); return u && u.text? ` — "${trunc(u.text,26)}"` : ''; };
     const EV={
-      no_bluf:()=> m.contentFromScript? '원고 앞부분에 결론·요청 표현이 없음' : `첫 부분: "${trunc(firstPart,34)}"`,
+      first30:()=> f30.problem,
       no_ask:()=>`마지막 부분: "${trunc(lastPart,34)}"`,
       key_missing:()=>`준비한 결론 키워드 중 ${Math.round((m.keyCoverage||0)*100)}%만 등장`,
       no_numbers:()=>'숫자 0개', no_signpost:()=>'"첫째/둘째" 같은 구조 표지 없음', no_risk:()=>'리스크·대응 언급 없음',
@@ -1062,7 +1140,7 @@ const BC = (() => {
     const findings=Object.keys(sev).map(id=>({id, sev:sev[id], axis:F[id].axis, title:F[id].title, why:F[id].why, how:F[id].how, drill:F[id].drill, evidence: EV[id]? EV[id]():''}))
       .sort((a,b)=> b.sev-a.sev || ORDER.indexOf(a.id)-ORDER.indexOf(b.id));
     const strengths=[];
-    if(hasText && m.bluf) strengths.push('결론을 앞부분에서 먼저 말했습니다.');
+    if(f30.status==='pass') strengths.push('첫 30초 안에 무슨 건이고 결론이 무엇인지 들립니다.');
     if(hasText && m.ask) strengths.push('마지막에 요청 사항을 분명히 했습니다.');
     if(m.numbers>=2) strengths.push(`숫자 ${m.numbers}개로 근거를 댔습니다.`);
     if(hasPros && known.length>=2 && riseN===0) strengths.push(`문장 끝을 내려 단정하게 마무리했습니다 (${fallN}/${known.length}문장 하강).`);
@@ -1075,7 +1153,7 @@ const BC = (() => {
     if(target && duration>0 && duration<=target*1.1 && duration>=target*0.5) strengths.push(`목표 시간 안에 마쳤습니다 (${fmtT(duration)}${durEst?' 예상':''}).`);
     const OX=b=>b?'O':'X';
     const reasons={
-      structure: sc.structure!=null? `결론 먼저 ${OX(m.bluf)} · 숫자 ${m.numbers}개 · 구조 표지 ${OX(m.signpost)} · 마지막 요청 ${OX(m.ask)} · 리스크 ${OX(m.risk)}${target? ` · ${fmtT(duration)}${durEst?'(예상)':''}/${fmtT(target)}`:''}` : '평가할 내용(받아 적은 글)이 없습니다',
+      structure: sc.structure!=null? `첫 30초 결론 ${OX(f30.status==='pass')} · 숫자 ${m.numbers}개 · 구조 표지 ${OX(m.signpost)} · 마지막 요청 ${OX(m.ask)} · 리스크 ${OX(m.risk)}${target? ` · ${fmtT(duration)}${durEst?'(예상)':''}/${fmtT(target)}`:''}` : '평가할 내용(받아 적은 글)이 없습니다',
       delivery: sc.delivery!=null? `끝 내림 ${fallN}/${known.length} · 끝 올림 ${riseN} · 말끝 흐림 ${trailN}/${pu.length} · 억양 폭 ${(m.rangeSt??0).toFixed(1)}반음${tgtTotal? ` · 핵심어 강세 ${tgtHit}/${tgtTotal}`:''}` : (kind==='script'? '소리 내어 말한 뒤 측정합니다' : '이번 시도에는 억양 측정값이 없습니다'),
       pace: sc.pace!=null? `${Math.round(rate)} ${m.rateUnit}${rateEst?'(추정)':''}, 권장 ${rateLo}~${rateHi}${m.pauseRatio!=null? ` · 쉼 ${Math.round(m.pauseRatio*100)}%`:''}${m.longestRun!=null? ` · 최장 연속 ${Number(m.longestRun).toFixed(1)}초`:''}` : (kind==='script'? '소리 내어 말한 뒤 측정합니다' : '속도를 잴 수 없었습니다'),
       language: sc.language!=null? `군말 분당 ${fillerPerMin.toFixed(1)}회 · 흐리는 표현 ${m.hedgeN}회${L==='ko' && closed.length? ` · '~습니다' 종결 ${formalN}/${closed.length}`:''}${runOnN? ` · 긴 문장 ${runOnN}개`:''}` : '평가할 내용(받아 적은 글)이 없습니다'
@@ -1105,7 +1183,8 @@ const BC = (() => {
   }
   function compare(prev, cur, pf, cf){
     if(!prev || !cur) return null;
-    const items=(prev.focusIds||[]).map(id=>{
+    const items=(prev.focusIds||[]).map(id0=>{
+      const id= id0==='no_bluf'? 'first30' : id0;
       const f=F[id]; if(!f) return null;
       if(!MEASURABLE[f.axis](cur.m)) return {id, title:f.title, status:'unknown'};
       const was=BAD[id](prev.m), now=BAD[id](cur.m);
@@ -1225,13 +1304,29 @@ const BC = (() => {
     '당신은 글로벌 최상위 수준의 임원 커뮤니케이션 코치입니다. 전략 컨설팅 파트너와 포춘 500 경영진을 코칭해 온 경험으로, 사용자가 임원 1:1 구두 보고를 소리 내어 연습한 결과를 듣고 다음 연습에서 바로 고칠 수 있는 구체적인 코칭을 합니다.',
     '',
     '[임원 1:1 보고 원칙]',
-    '- 내용: 결론 먼저(BLUF) → 근거 세 가지(숫자로) → 리스크와 대응 → 명확한 요청(무엇을, 언제까지). 피라미드 원칙과 "So what?" 기준. 한 문장에 한 메시지. 임원이 언제 말을 끊어도 앞 30초에 핵심이 남아야 합니다.',
+    '- 내용: 임원이 첫 30초 안에 무슨 건이고 결론이 무엇인지 알 수 있게 한 뒤, 근거(숫자로) → 리스크와 대응 → 명확한 요청(무엇을, 언제까지)으로 이어 갑니다. 피라미드 원칙과 "So what?" 기준. 한 문장에 한 메시지.',
     '- 억양: 평서문의 끝은 내려서(↘) 단정하게. 끝을 올리면(↗) 질문이나 확신 부족으로 들립니다. 한국어는 서술어가 문장 끝에 오므로 말끝이 흐려지면 결론이 사라집니다. 마지막 음절까지 음량을 유지합니다.',
     '- 강세: 새 정보·숫자·대조되는 말에 문장당 1~2곳. 한국어의 강조는 음을 살짝 올리고, 조금 길고 또렷하게, 그 앞에 짧게 쉬는 방식입니다.',
     '- 쉼: 핵심 숫자 앞뒤와 결론 직후에 0.5~1초. 군말이 나올 자리는 침묵으로 바꿉니다.',
     '- 속도: 한국어 270~330음절/분(영어 140~165단어/분). 결론과 숫자는 더 천천히.',
     '- 언어: "~것 같습니다", "아마", "좀" 같은 흐리는 표현을 빼고, 판단은 "~로 판단합니다", 불확실성은 확률이나 범위로 말합니다. 종결은 "~습니다/입니다".',
     '- 태도: 차분하고 확신 있게. 존중하되 위축되지 않게.',
+    '',
+    '[점검 기준]',
+    '- 근거: 주장마다 숫자(규모·비용·기간)가 받쳐 주는가?',
+    '- 구조: 몇 가지를 말할지 예고하고 그 순서대로 말하는가?',
+    '- 리스크: 임원이 물을 리스크와 대응을 먼저 꺼내는가?',
+    '- 요청: 마지막에 무엇을 언제까지 원하는지 분명한가?',
+    '- 문장: 한 문장에 한 메시지이고, 흐리는 표현 없이 단정하는가?',
+    '- 첫 30초: 임원이 첫 30초 안에 무슨 건이고 결론이 무엇인지 알 수 있는가?',
+    '  · 범위: 구두 보고(원고 포함)는 첫 3문장, 문서는 첫 장의 제목과 첫 문단(또는 요약).',
+    '  · 점검 방법: 이 범위만 읽고 임원이 이해할 결론을 한 문장으로 요약합니다. 요약이 본문의 결론과 같으면 통과하고, 요약할 수 없거나 본문의 결론과 다르면 지적합니다.',
+    '  · 허용: 결론 앞의 맥락 1~2문장(청자가 이미 아는 상황, 왜 지금 이 보고를 하는지).',
+    '  · 지적 대상: 결론 앞에 경위·진행 과정·새로운 정보가 나열되어 결론이 범위 밖으로 밀린 경우, 맥락만 있고 결론이 없는 경우.',
+    '  · 예외: 청자가 주제를 처음 듣는 경우, 결론이 나쁜 소식인 경우, 시연처럼 문제를 먼저 보여 줘야 하는 경우에는 맥락이 길어도 됩니다. 단, 범위 안에 "결론은 ○○이고, 이유를 보여 드리겠습니다" 같은 예고가 있어야 합니다.',
+    '  · 결론이 첫 문장에 없다는 이유만으로는 지적하지 않습니다.',
+    '  · 이 기준으로 지적할 때는 그 항목의 evidence를 "30초 안에 전달되는 내용: ○○ / 실제 결론: ○○" 형식으로 씁니다.',
+    '- 점검 기준을 언급할 때는 번호를 붙이지 말고 기준의 이름이나 내용으로 말합니다.',
     '',
     '[코칭 태도]',
     '- 사용자는 편안하게 반복 연습하는 중입니다. 따뜻하지만 정확하게, 칭찬은 근거와 함께 짧게, 고칠 점은 바로 따라 할 수 있게 씁니다.',
@@ -1245,12 +1340,12 @@ const BC = (() => {
     '- focus: 정확히 3개, 임팩트가 큰 순서. title은 15자 안팎의 실천형 문구, why는 임원 관점에서 왜 중요한지 1~2문장, how는 바로 따라 할 방법(표기법 사용 가능), drill은 다음 시도 전 30초~1분짜리 연습, evidence는 사용자 발화 인용이나 측정값. 내용(구조·메시지)과 전달(억양·강세·속도) 중 실제로 가장 큰 문제를 고르세요. 억양 측정값이 없으면 전달 항목은 텍스트에서 알 수 있는 것만 다룹니다.',
     '- previous_check: [지난 시도]의 포커스 각각이 이번에 개선됐는지(improved/partly/not_yet)와 한 줄 근거. 지난 시도가 없으면 빈 배열.',
     '- intonation_notes: 억양·강세·쉼을 고칠 문장 최대 4개. quote는 사용자 문장 일부 그대로, issue는 문제, fix는 표기법으로 다시 쓴 낭독 지시.',
-    '- bluf_rewrite: 사용자의 실제 내용으로 "결론 → 이유 → 요청" 30초 오프닝을 다시 씁니다.',
+    '- bluf_rewrite: 사용자의 실제 내용으로 첫 30초 오프닝을 다시 씁니다. 필요하면 맥락 1~2문장, 이어서 결론, 이유, 요청 순서입니다.',
     '- model_script: 목표 시간에 맞춘 모범 스크립트. 한 줄에 한 문장. 표기법: 강조 단어는 **단어**, 짧은 쉼은 " / ", 긴 쉼은 " // ", 평서문 끝은 " ↘". 문장당 강조 1~2개, 핵심 숫자 앞에는 " / ".',
     '- exec_questions: 이 보고를 들은 임원이 바로 던질 날카로운 질문 3개.',
     '- next_drill: 다음 시도에서 집중할 한 가지를 한 문장으로.',
     '- scores: 네 축을 0~100 정수로 채점하고, reason에 채점 근거를 25자 안팎 한 줄로 씁니다(측정값이나 실제 발화를 근거로). 기준: 90 이상 = 글로벌 최상위 임원 브리프, 75~89 = 좋음(조금 다듬으면 됨), 60~74 = 보통, 60 미만 = 큰 수정 필요.',
-    '  structure = 결론 먼저·근거의 숫자·논리 흐름·명확한 요청 / delivery = 문장 끝 하강·말끝 유지·강세 위치·억양 변화폭(억양 측정값 근거) / pace = 속도·쉼·연속 발화(측정값 근거) / language = 군말·흐리는 표현·종결·문장 길이.',
+    '  structure = 첫 30초(무슨 건이고 결론이 무엇인지)·근거의 숫자·논리 흐름·명확한 요청 / delivery = 문장 끝 하강·말끝 유지·강세 위치·억양 변화폭(억양 측정값 근거) / pace = 속도·쉼·연속 발화(측정값 근거) / language = 군말·흐리는 표현·종결·문장 길이.',
     '  억양 측정값이 없으면 delivery의 score는 null, 원고 점검이면 delivery와 pace의 score는 null로 둡니다.',
     '- overall_reason: 종합 점수의 이유를 한 문장으로.',
     '모든 설명은 한국어로 씁니다. 보고 언어가 English이면 bluf_rewrite와 model_script, exec_questions는 영어로 씁니다.'
@@ -1289,7 +1384,8 @@ const BC = (() => {
     }
     if(m.hasText){
       out.push(`- 군말 ${m.fillerN}회${m.filled?` + '어/음' 추정 ${m.filled}회`:''}, 흐리는 표현 ${m.hedgeN}회, '~요' 종결 ${m.yoN}/${m.closedN}, 열린 종결 ${m.openN}`);
-      out.push(`- 구조: 결론 먼저 ${m.bluf?'O':'X'}, 구조 표지 ${m.signpost?'O':'X'}, 숫자 ${m.numbers}개, 마지막 요청 ${m.ask?'O':'X'}, 리스크 언급 ${m.risk?'O':'X'}${m.keyCoverage!=null?`, 준비한 결론 키워드 반영 ${Math.round(m.keyCoverage*100)}%`:''}`);
+      if(m.first30 && m.first30.window) out.push(`- 첫 30초 범위(첫 3문장): "${m.first30.window}"`);
+      out.push(`- 구조: 첫 30초 결론 ${m.first30? (m.first30.status==='pass'?'O':'X') : (m.bluf?'O':'X')}, 구조 표지 ${m.signpost?'O':'X'}, 숫자 ${m.numbers}개, 마지막 요청 ${m.ask?'O':'X'}, 리스크 언급 ${m.risk?'O':'X'}${m.keyCoverage!=null?`, 준비한 결론 키워드 반영 ${Math.round(m.keyCoverage*100)}%`:''}`);
     }
     out.push('');
     out.push('[내장 코치의 1차 진단 — 규칙 기반 참고용]');
@@ -1301,7 +1397,7 @@ const BC = (() => {
       const foc= prevAI && prevAI.focus && prevAI.focus.length? prevAI.focus.map(f=>f.title) : prevEv.focusIds.map(id=>F[id]?F[id].title:id);
       out.push(`- 지난번 포커스: ${foc.join(' / ')}`);
       const pm=prevEv.m;
-      out.push(`- 지난번 측정값: 길이 ${fmtT(pm.duration)}${pm.rate!=null?`, 속도 ${Math.round(pm.rate)} ${pm.rateUnit}`:''}${pm.hasPros?`, 끝 올림 ${pm.riseN}/${pm.knownN}, 말끝 흐림 ${pm.trailN}/${pm.prosUnits}, 억양 폭 ${pm.rangeSt}반음`:''}, 군말 ${pm.fillerN}회, 흐리는 표현 ${pm.hedgeN}회, 결론 먼저 ${pm.bluf?'O':'X'}, 요청 ${pm.ask?'O':'X'}`);
+      out.push(`- 지난번 측정값: 길이 ${fmtT(pm.duration)}${pm.rate!=null?`, 속도 ${Math.round(pm.rate)} ${pm.rateUnit}`:''}${pm.hasPros?`, 끝 올림 ${pm.riseN}/${pm.knownN}, 말끝 흐림 ${pm.trailN}/${pm.prosUnits}, 억양 폭 ${pm.rangeSt}반음`:''}, 군말 ${pm.fillerN}회, 흐리는 표현 ${pm.hedgeN}회, 첫 30초 결론 ${pm.bluf?'O':'X'}, 요청 ${pm.ask?'O':'X'}`);
       const first=prevEv.units.filter(u=>u.text).slice(0,2).map(u=>`"${trunc(u.text,120)}"`).join(' ');
       if(first) out.push(`- 지난번 첫 문장들: ${first}`);
     }
@@ -1323,7 +1419,7 @@ const BC = (() => {
     };
   }
 
-  return {detectPitch, Tracker, phraseMetrics, countNuclei, prosodyStage, evaluate, compare, analyzeText, extractKeywords, splitSentences, autoMark, speechChunks, alignSentences, toSpeechText,
+  return {firstThirty, spokenSentences, detectPitch, Tracker, phraseMetrics, countNuclei, prosodyStage, evaluate, compare, analyzeText, extractKeywords, splitSentences, autoMark, speechChunks, alignSentences, toSpeechText,
     buildAIPrompt, normalizeAI, finalScores, AI_SCHEMA, AXES, F, CONTOUR_KO, AUD, PURPOSE, quantile, median, stOf, tokenize, fmtT};
 })();
 // CORE-END
@@ -1661,7 +1757,7 @@ function beginRecording(r){
   r.state='rec'; r.startWall=performance.now(); setState('rec');
   if(r.mr && r.mr.state==='inactive'){ try{ r.mr.start(1000); }catch(e){} }
   $('countdown').hidden=true;
-  const c=$('liveCue'); c.className='cue calm'; c.textContent='편하게 시작하세요. 첫 문장은 결론부터.';
+  const c=$('liveCue'); c.className='cue calm'; c.textContent='편하게 시작하세요. 첫 30초 안에 무슨 건이고 결론이 뭔지 들리게.';
   renderTranscript();
 }
 function pauseTake(auto){
@@ -1767,7 +1863,7 @@ function loop(){
     if(r.state==='countdown'){
       const left=Math.ceil((r.cdEnd-performance.now())/1000);
       const cd=$('countdown'); cd.hidden=false;
-      cd.innerHTML=`<div><b>${Math.max(1,left)}</b>어깨 힘을 빼고, 첫 문장은 결론부터</div>`;
+      cd.innerHTML=`<div><b>${Math.max(1,left)}</b>어깨 힘을 빼고, 30초 안에 결론까지</div>`;
       if(left<=0) beginRecording(r);
     }
     const t=clock(); $('liveTimer').textContent=fmt(t);
@@ -2217,7 +2313,7 @@ function renderReview(){
   $('focusSource').textContent= useAI? 'AI 코치' : '내장 코치';
   $('focusSource').className= 'chip '+(useAI?'acc':'');
   const focus= useAI? att.ai.focus : ev.findings.slice(0,3);
-  $('focusList').innerHTML= focus.length? focus.map(f=>`<li><div class="f-title">${esc(f.title)}</div>${f.evidence?`<div class="f-ev">${esc(f.evidence)}</div>`:''}<div class="f-why">${esc(f.why)}</div><div class="f-how">${renderInline(f.how)}</div>${f.drill?`<div class="f-drill"><b>다음 시도 전 연습</b>${renderInline(f.drill)}</div>`:''}</li>`).join('')
+  $('focusList').innerHTML= focus.length? focus.map(f=>`<li><div class="f-title">${esc(f.title)}</div>${f.evidence?`<div class="f-ev"><b>문제</b>${esc(f.evidence)}</div>`:''}<div class="f-why">${esc(f.why)}</div><div class="f-how">${renderInline(f.how)}</div>${f.drill?`<div class="f-drill"><b>다음 시도 전 연습</b>${renderInline(f.drill)}</div>`:''}</li>`).join('')
     : '<li><div class="f-title">눈에 띄는 문제가 없습니다</div><div class="f-why">같은 내용을 목표 시간의 80%로 줄여 보거나, 예상 질문에 30초로 답하는 연습으로 넘어가 보세요.</div></li>';
   const rest= useAI? ev.findings.slice(0,6) : ev.findings.slice(3,9);
   $('moreFindings').hidden=!rest.length;

@@ -130,12 +130,12 @@ test('full pipeline: prosody + transcript -> findings and scores', () => {
 
 test('comparison marks fixed focus items as improved', () => {
   const ctx = { purpose: 'decision', target: 120, key: '', ask: '' };
-  const before = BC.evaluate(null, ['음 그러니까 매출이 좀 줄어든 것 같습니다', '아마 다음 달에는 회복될 것 같아요'], ctx, 'ko-KR', { kind: 'script' });
+  const before = BC.evaluate(null, ['지난달 거래처 세 곳과 미팅을 했는데요', '첫 미팅에서는 가격 이야기를 했고요', '두 번째 미팅에서는 물량 이야기를 했습니다', '아마 다음 달에는 매출이 회복될 것 같아요'], ctx, 'ko-KR', { kind: 'script' });
   const after = BC.evaluate(null, ['결론부터 말씀드리면 매출이 12% 줄었습니다', '첫째 원인은 단가 하락입니다', '다음 주까지 가격 조정을 승인해 주십시오'], ctx, 'ko-KR', { kind: 'script' });
-  assert.ok(before.focusIds.includes('no_bluf'));
+  assert.ok(before.focusIds.includes('first30'));
   const cmp = BC.compare(before, after);
   const byId = Object.fromEntries(cmp.items.map((i) => [i.id, i.status]));
-  assert.equal(byId.no_bluf, 'improved');
+  assert.equal(byId.first30, 'improved');
   assert.ok(cmp.delta > 0, `delta ${cmp.delta}`);
 });
 
@@ -198,7 +198,7 @@ test('markup becomes speakable text with stress words for TTS', () => {
 test('final score blends device measurement with the AI score per axis and keeps the reasons', () => {
   const ctx = { purpose: 'decision', target: 120, key: '', ask: '' };
   const ev = BC.evaluate(null, ['결론부터 말씀드리면 매출이 12% 줄었습니다', '다음 주까지 가격 조정을 승인해 주십시오'], ctx, 'ko-KR', { kind: 'script' });
-  assert.match(ev.reasons.structure, /결론 먼저 O/);
+  assert.match(ev.reasons.structure, /첫 30초 결론 O/);
   assert.match(ev.reasons.structure, /마지막 요청 O/);
   assert.match(ev.reasons.delivery, /말한 뒤/);
   const ai = BC.normalizeAI({ scores: { structure: { score: 90, reason: '결론과 요청이 분명' }, delivery: { score: 80, reason: 'x' }, pace: { score: null, reason: '' }, language: { score: '70', reason: '단정형' } }, overall_reason: '구조가 탄탄함' });
@@ -219,6 +219,55 @@ test('final score blends device measurement with the AI score per axis and keeps
   assert.equal(cmp.delta, fs.overall - plain.overall);
 });
 
+const F30_CASES = {
+  contextThenConclusion: '지난주 말씀하신 ○○사 AX 점검 건입니다. 점검해 보니 AI 성과로 보고된 효과의 대부분은 기존 설비 개선 효과였습니다. 근거는 두 가지입니다. 첫째, 생산성 향상 12% 가운데 9%는 설비 교체 시점과 겹칩니다. 둘째, AI를 쓰지 않은 라인도 같은 기간 8% 개선됐습니다. 다음 달 실사에서 이 부분을 확인하도록 승인해 주십시오.',
+  conclusionFirst: '결론부터 말씀드리면, 물류 거점을 평택으로 통합하면 연간 18억 원을 절감할 수 있습니다. 이유는 세 가지입니다. 첫째, 운송비가 연 9억 원 줄어듭니다. 둘째, 재고 회전이 2주 빨라집니다. 셋째, 인력 재배치로 6억 원을 아낍니다. 다음 주 금요일까지 착수를 승인해 주십시오.',
+  narrativeFirst: '○○사와 세 차례 미팅을 했는데요, 첫 미팅에서는 현황 자료를 받았고요. 두 번째 미팅에서는 공장 현장을 둘러봤습니다. 세 번째 미팅에서는 담당 임원 인터뷰를 진행했습니다. 그 결과, AI 성과로 보고된 효과의 대부분은 기존 설비 개선 효과였습니다. 다음 달 실사를 승인해 주십시오.',
+  demoWithPreview: '오늘은 새 상담 시스템을 화면으로 직접 보여 드리겠습니다. 결론은 상담 한 건당 처리 시간이 40% 줄었다는 것이고, 어떻게 줄었는지 순서대로 보여 드리겠습니다. 먼저 기존 상담 화면입니다. 고객 문의가 들어오면 상담원이 세 개의 시스템을 오가며 주문 내역을 찾았습니다. 새 화면에서는 문의 내용과 주문 내역이 한 화면에 뜹니다. 다음 달부터 전 센터로 확대하도록 승인해 주십시오.',
+};
+const first30Flag = (text, opts = {}) => {
+  const ctx = { purpose: 'decision', target: 120, key: opts.key || '', ask: '' };
+  const units = opts.spoken ? BC.splitSentences(text).map((x) => x.replace(/[.,]/g, '')) : BC.splitSentences(text);
+  const ev = BC.evaluate(null, units, ctx, 'ko-KR', { kind: opts.spoken ? 'speech' : 'script', duration: 40 });
+  return ev.findings.find((f) => f.id === 'first30') || null;
+};
+
+test('first 30 seconds: review cases (script and unpunctuated speech)', () => {
+  for (const spoken of [false, true]) {
+    assert.equal(first30Flag(F30_CASES.contextThenConclusion, { spoken }), null, 'context sentence + conclusion passes');
+    assert.equal(first30Flag(F30_CASES.conclusionFirst, { spoken }), null, 'conclusion first passes');
+    const f = first30Flag(F30_CASES.narrativeFirst, { spoken });
+    assert.ok(f, 'narrated events pushing the conclusion out of scope are flagged');
+    assert.match(f.evidence, /^30초 안에 전달되는 내용: .+ \/ 실제 결론: .+기존 설비 개선 효과/);
+    assert.equal(first30Flag(F30_CASES.demoWithPreview, { spoken }), null, 'demo with a preview in scope passes');
+  }
+});
+
+test('first 30 seconds: context only, demo without preview, empty promise, different conclusion', () => {
+  const contextOnly = first30Flag('요즘 업계에서 AI 도입 사례가 많습니다. 저희 팀도 작년부터 관심을 가져 왔습니다. 여러 회사의 사례를 살펴보고 있습니다. 오늘은 그 내용을 공유드립니다.');
+  assert.ok(contextOnly); assert.match(contextOnly.evidence, /맥락만 있고 결론이 없음/);
+  assert.ok(first30Flag('오늘은 새 상담 시스템을 화면으로 보여 드리겠습니다. 먼저 기존 상담 화면입니다. 고객 문의가 들어오면 상담원이 세 개의 시스템을 오갑니다. 결론적으로 처리 시간이 40% 줄었습니다.'), 'long demo without a preview is flagged');
+  assert.ok(first30Flag('결론은 마지막에 말씀드리겠습니다. 먼저 경과를 설명드리면 지난달 회의가 있었습니다. 그 회의에서 일정이 정해졌습니다. 결과적으로 비용이 10% 줄었습니다.'), 'a promise without the conclusion does not count');
+  const diff = first30Flag('지난주 말씀하신 ○○사 점검 건입니다. AI 도입 후 생산성이 12% 늘었습니다. 현장 반응도 좋았습니다. 하지만 그 대부분은 기존 설비 개선 효과였습니다.', { key: 'AI 성과의 대부분은 기존 설비 개선 효과' });
+  assert.ok(diff, 'a different conclusion in the first 30 seconds is flagged when the prepared conclusion comes later');
+  assert.match(diff.evidence, /실제 결론: "하지만 그 대부분은 기존 설비 개선 효과였습니다/);
+  // never flagged only because the first sentence is not the conclusion
+  assert.equal(first30Flag('이번 달 정례 보고입니다. 신규 고객이 지난달보다 20% 늘었습니다. 이유는 두 가지입니다.'), null);
+});
+
+test('review prompt lists the first-30-seconds criterion without numbering and drops conclusion-first', () => {
+  const ctx = { audience: 'ceo', purpose: 'decision', target: 120, key: '', ask: '' };
+  const ev = BC.evaluate(null, BC.splitSentences(F30_CASES.narrativeFirst), ctx, 'ko-KR', { kind: 'script' });
+  const { system, user } = BC.buildAIPrompt(ctx, ev, null, null);
+  assert.match(system, /\[점검 기준\]/);
+  assert.match(system, /- 첫 30초: 임원이 첫 30초 안에 무슨 건이고 결론이 무엇인지 알 수 있는가\?/);
+  assert.match(system, /결론이 첫 문장에 없다는 이유만으로는 지적하지 않습니다/);
+  assert.match(system, /30초 안에 전달되는 내용: ○○ \/ 실제 결론: ○○/);
+  assert.doesNotMatch(system + user, /BLUF|결론 먼저|6번|\n\s*6\./);
+  assert.match(user, /첫 30초 범위\(첫 3문장\)/);
+  for (const f of Object.values(BC.F)) assert.doesNotMatch(f.title, /^\d+[.)]|\d+번/);
+});
+
 test('AI prompt and schema are well formed', () => {
   const walk = (s, path = 'root') => {
     if (s.type === 'object') {
@@ -232,7 +281,7 @@ test('AI prompt and schema are well formed', () => {
   const ctx = { audience: 'ceo', purpose: 'decision', target: 120, key: '18억 절감', ask: '착수 승인', script: '' };
   const ev = BC.evaluate(null, ['결론부터 말씀드리면 18억 원을 절감합니다'], ctx, 'ko-KR', { kind: 'script' });
   const { system, user } = BC.buildAIPrompt(ctx, ev, ev, null);
-  assert.match(system, /BLUF/);
+  assert.match(system, /\[점검 기준\]/);
   assert.match(user, /\[보고 상황\]/);
   assert.match(user, /\[지난 시도 요약\]/);
   assert.match(user, /model_script/);
