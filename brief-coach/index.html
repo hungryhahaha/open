@@ -264,7 +264,7 @@ canvas.take{display:block;height:170px}
 .units{display:flex;flex-direction:column}
 .unit{display:grid;grid-template-columns:30px 1fr;gap:4px 10px;padding:12px 0;border-top:1px solid var(--line)}
 .unit:first-child{border-top:0}
-.u-end{grid-row:span 2;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:16px;background:var(--sunken);color:var(--ink-3)}
+.u-end{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-weight:700;font-size:16px;background:var(--sunken);color:var(--ink-3)}
 .u-end.fall{background:var(--good-soft);color:var(--good)}
 .u-end.rise{background:var(--warn-soft);color:var(--warn)}
 .u-end.trail{background:var(--bad-soft);color:var(--bad)}
@@ -279,6 +279,13 @@ canvas.take{display:block;height:170px}
 .spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--accent-soft);border-top-color:var(--accent);animation:spin 1s linear infinite;flex:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .ai-headline{font-size:16.5px;font-weight:600;line-height:1.5}
+.ai-summary{font-size:15px;line-height:1.75;color:var(--ink)}
+.lite-note{font-size:13.5px;line-height:1.6;background:var(--warn-soft);border-radius:10px;padding:10px 12px}
+.u-body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.u-ai{font-size:14px;line-height:1.6;color:var(--ink-2);display:flex;gap:8px;align-items:baseline}
+.u-ai b{flex:none;font-size:11.5px;font-weight:700;color:var(--accent)}
+.u-ai.fix b{color:var(--warn)}
+.u-fix{background:var(--surface-2);border-radius:8px;padding:6px 10px;display:flex;flex-direction:column;gap:4px}
 .ai-sec{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
 .ai-sec h4{margin:0;font-size:13px;color:var(--ink-3);font-weight:600;letter-spacing:.02em}
 .qa{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:14.5px}
@@ -461,6 +468,7 @@ textarea.edit{min-height:180px;font-size:14.5px}
         <div class="axes" id="scoreAxes"></div>
         <p class="blend-note" id="blendNote"></p>
       </div>
+      <div class="card" id="summaryCard"></div>
       <div class="card" id="compareCard" hidden>
         <div class="card-head"><h3>지난 연습과 비교</h3><span id="compareDelta"></span></div>
         <ul class="checks" id="compareList"></ul>
@@ -474,7 +482,6 @@ textarea.edit{min-height:180px;font-size:14.5px}
         <h3>잘한 점</h3>
         <ul class="plain" id="strengthList"></ul>
       </div>
-      <div class="card" id="aiCard"></div>
       <div class="card" id="deliveryCard">
         <div class="card-head"><h3>문장별 전달 지도</h3><button class="btn tiny" type="button" id="btnPlayAll" hidden>내 녹음 듣기</button></div>
         <div class="take-wrap" id="takeWrap"><canvas class="take" id="takeCanvas" aria-label="전체 억양 곡선"></canvas></div>
@@ -482,6 +489,11 @@ textarea.edit{min-height:180px;font-size:14.5px}
         <p class="small" id="takeLegend">밑줄 친 <span style="color:var(--stress);font-weight:600">주황 단어</span>는 강세가 실린 곳(추정), 점선은 강세가 필요한데 약했던 숫자·핵심어, 노란 배경은 군말, 붉은 배경은 흐리는 표현입니다.</p>
         <div class="units" id="unitList"></div>
       </div>
+      <div class="card" id="aiCard" hidden></div>
+      <details class="card fold" id="measureFold" hidden>
+        <summary><h3>기기 측정 상세</h3><span class="hint">AI 검토의 근거가 된 기기 측정과 내장 코치의 규칙 진단입니다</span></summary>
+        <div class="fold-body"><ul class="plain" id="measureList"></ul></div>
+      </details>
       <details class="card fold" id="editFold">
         <summary><h3 id="editTitle">받아 적은 내용 고치기</h3><span class="hint" id="editHint">음성 인식이 틀렸다면 고친 뒤 다시 분석하세요 (한 줄 = 한 문장)</span></summary>
         <div class="fold-body">
@@ -1161,8 +1173,6 @@ const BC = (() => {
     return {L, kind, units, m, scores:sc, reasons, overall, findings, focusIds:findings.slice(0,3).map(f=>f.id), strengths:strengths.slice(0,5), keywords};
   }
 
-  // Share of the AI's score in each axis. Content is judged best by the AI; delivery and pace rest on what the device measured.
-  const AI_W={structure:0.6, delivery:0.3, pace:0.2, language:0.5};
   const AXIS_W={structure:.3, delivery:.3, pace:.2, language:.2};
   function finalScores(ev, ai){
     const axes={}; let ws=0, wv=0;
@@ -1171,8 +1181,9 @@ const BC = (() => {
       const measured= ev.scores[k];
       const a= aiScores && aiScores[k] ? aiScores[k] : null;
       const aiScore= measured!=null && a && typeof a.score==='number' && isFinite(a.score) ? clamp(Math.round(a.score),0,100) : null;
-      const final= measured==null? null : aiScore==null? measured : Math.round((1-AI_W[k])*measured + AI_W[k]*aiScore);
-      axes[k]={final, measured, ai:aiScore, aiWeight:AI_W[k], reason:(ev.reasons||{})[k]||'', aiReason: aiScore!=null? (a.reason||'') : ''};
+      // the AI reviewed the transcript together with these measurements, so its score is the final one; the measurement stays as the basis
+      const final= measured==null? null : aiScore!=null? aiScore : measured;
+      axes[k]={final, measured, ai:aiScore, reason:(ev.reasons||{})[k]||'', aiReason: aiScore!=null? (a.reason||'') : ''};
       if(final!=null){ ws+=AXIS_W[k]; wv+=AXIS_W[k]*final; }
     }
     const overall= ws? Math.round(wv/ws) : null;
@@ -1281,16 +1292,17 @@ const BC = (() => {
 
   /* ---------- AI coaching prompt ---------- */
   const AI_SCHEMA={type:'object', additionalProperties:false,
-    required:['headline','strengths','focus','previous_check','intonation_notes','bluf_rewrite','model_script','exec_questions','next_drill','scores','overall_reason'],
+    required:['headline','summary','strengths','focus','previous_check','sentence_feedback','bluf_rewrite','model_script','exec_questions','next_drill','scores','overall_reason'],
     properties:{
       headline:{type:'string'},
+      summary:{type:'string'},
       strengths:{type:'array', items:{type:'string'}},
       focus:{type:'array', items:{type:'object', additionalProperties:false, required:['title','why','how','drill','evidence'],
         properties:{title:{type:'string'}, why:{type:'string'}, how:{type:'string'}, drill:{type:'string'}, evidence:{type:'string'}}}},
       previous_check:{type:'array', items:{type:'object', additionalProperties:false, required:['title','status','note'],
         properties:{title:{type:'string'}, status:{type:'string', enum:['improved','partly','not_yet']}, note:{type:'string'}}}},
-      intonation_notes:{type:'array', items:{type:'object', additionalProperties:false, required:['quote','issue','fix'],
-        properties:{quote:{type:'string'}, issue:{type:'string'}, fix:{type:'string'}}}},
+      sentence_feedback:{type:'array', items:{type:'object', additionalProperties:false, required:['n','verdict','comment','fix'],
+        properties:{n:{type:'integer'}, verdict:{type:'string', enum:['good','fix']}, comment:{type:'string'}, fix:{type:'string'}}}},
       bluf_rewrite:{type:'string'},
       model_script:{type:'string'},
       exec_questions:{type:'array', items:{type:'string'}},
@@ -1335,11 +1347,13 @@ const BC = (() => {
   ].join('\n');
   const RULES=[
     '[작성 규칙 — 아래 JSON 필드를 채우세요]',
+    '이 피드백이 사용자 화면의 주 코칭과 최종 점수가 됩니다. [내장 코치의 1차 진단]은 단순 규칙으로 만든 참고 자료라 틀릴 수 있으니, 실제 발화와 측정값을 직접 보고 독립적으로 판단하고 동의하지 않으면 따르지 않습니다.',
     '- headline: 임원 입장에서 이번 브리프가 어떻게 들렸는지 한 문장 평가.',
+    '- summary: 총평 3~4문장. 임원이 이 브리프를 듣고 무엇을 이해했을지, 가장 큰 강점과 가장 큰 문제, 다음 연습의 방향을 씁니다. 화면 맨 위에 나가는 주 코멘트입니다.',
     '- strengths: 실제 발화를 근거로 한 잘한 점 2~3개.',
     '- focus: 정확히 3개, 임팩트가 큰 순서. title은 15자 안팎의 실천형 문구, why는 임원 관점에서 왜 중요한지 1~2문장, how는 바로 따라 할 방법(표기법 사용 가능), drill은 다음 시도 전 30초~1분짜리 연습, evidence는 사용자 발화 인용이나 측정값. 내용(구조·메시지)과 전달(억양·강세·속도) 중 실제로 가장 큰 문제를 고르세요. 억양 측정값이 없으면 전달 항목은 텍스트에서 알 수 있는 것만 다룹니다.',
     '- previous_check: [지난 시도]의 포커스 각각이 이번에 개선됐는지(improved/partly/not_yet)와 한 줄 근거. 지난 시도가 없으면 빈 배열.',
-    '- intonation_notes: 억양·강세·쉼을 고칠 문장 최대 4개. quote는 사용자 문장 일부 그대로, issue는 문제, fix는 표기법으로 다시 쓴 낭독 지시.',
+    '- sentence_feedback: 위 [실제 발화](원고 점검이면 [원고])의 문장마다 하나씩 씁니다. n은 위 목록의 번호입니다. verdict는 그대로 좋으면 good, 고칠 점이 있으면 fix. comment는 그 문장이 임원에게 어떻게 들렸는지와 이유를 한 줄로 씁니다(내용과 억양 측정값을 함께 고려). fix는 verdict가 fix일 때 고쳐 말할 문장을 표기법(강세 **단어**, 짧은 쉼 " / ", 긴 쉼 " // ", 평서문 끝 " ↘")으로 쓰고, good이면 빈 문자열로 둡니다.',
     '- bluf_rewrite: 사용자의 실제 내용으로 첫 30초 오프닝을 다시 씁니다. 필요하면 맥락 1~2문장, 이어서 결론, 이유, 요청 순서입니다.',
     '- model_script: 목표 시간에 맞춘 모범 스크립트. 한 줄에 한 문장. 표기법: 강조 단어는 **단어**, 짧은 쉼은 " / ", 긴 쉼은 " // ", 평서문 끝은 " ↘". 문장당 강조 1~2개, 핵심 숫자 앞에는 " / ".',
     '- exec_questions: 이 보고를 들은 임원이 바로 던질 날카로운 질문 3개.',
@@ -1409,10 +1423,11 @@ const BC = (() => {
     const arr=v=>Array.isArray(v)? v:[]; const str=v=>typeof v==='string'? v:'';
     o=o&&typeof o==='object'? o:{};
     return {
-      headline:str(o.headline), strengths:arr(o.strengths).map(str).filter(Boolean).slice(0,4),
+      headline:str(o.headline), summary:str(o.summary), strengths:arr(o.strengths).map(str).filter(Boolean).slice(0,4),
       focus:arr(o.focus).map(f=>({title:str(f&&f.title), why:str(f&&f.why), how:str(f&&f.how), drill:str(f&&f.drill), evidence:str(f&&f.evidence)})).filter(f=>f.title).slice(0,3),
       previous_check:arr(o.previous_check).map(p=>({title:str(p&&p.title), status:['improved','partly','not_yet'].includes(p&&p.status)? p.status:'not_yet', note:str(p&&p.note)})).filter(p=>p.title),
       intonation_notes:arr(o.intonation_notes).map(n=>({quote:str(n&&n.quote), issue:str(n&&n.issue), fix:str(n&&n.fix)})).filter(n=>n.quote||n.fix).slice(0,4),
+      sentence_feedback:arr(o.sentence_feedback).map(x=>({n:Math.round(Number(x&&x.n)), verdict:(x&&x.verdict)==='fix'?'fix':'good', comment:str(x&&x.comment), fix:str(x&&x.fix)})).filter(x=>x.n>=1 && (x.comment||x.fix)).slice(0,60),
       bluf_rewrite:str(o.bluf_rewrite), model_script:str(o.model_script), exec_questions:arr(o.exec_questions).map(str).filter(Boolean).slice(0,4), next_drill:str(o.next_drill),
       scores: o.scores && typeof o.scores==='object'? Object.fromEntries(['structure','delivery','pace','language'].map(k=>{ const x=o.scores[k]||{}; const n=Number(x.score); return [k,{score: x.score==null || !isFinite(n)? null : clamp(Math.round(n),0,100), reason:str(x.reason)}]; })) : null,
       overall_reason:str(o.overall_reason)
@@ -2237,7 +2252,7 @@ async function runAI(att){
     if(S.viewId===att.id && currentView()==='review') renderReview(); else renderAIIfVisible(att);
   }
 }
-function renderAIIfVisible(att){ if(currentView()==='review' && S.viewId===att.id) renderAI(att); }
+function renderAIIfVisible(att){ if(currentView()==='review' && S.viewId===att.id) renderReview(); }
 
 /* --- model reading --- */
 let speaking=false;
@@ -2289,15 +2304,15 @@ function renderReview(){
     const d=cmp && cmp.axes[k]!=null && cmp.axes[k]!==0? `<span class="${cmp.axes[k]>0?'chip good':'chip bad'} mono">${cmp.axes[k]>0?'▲':'▼'}${Math.abs(cmp.axes[k])}</span>`:'';
     if(s==null) return `<div class="axis"><span>${BC.AXES[k]}</span><div class="bar"></div><span class="na">–</span><div class="why"><b>측정</b><span>${esc(a.reason)}</span></div></div>`;
     const lines= a.ai!=null
-      ? `<div class="why"><b>측정 ${a.measured}</b><span>${esc(a.reason)}</span></div><div class="why ai"><b>AI ${a.ai}</b><span>${esc(a.aiReason||'근거 없음')}</span></div>`
+      ? `<div class="why ai"><b>AI</b><span>${esc(a.aiReason||'근거 없음')}</span></div><div class="why"><b>측정 ${a.measured}</b><span>${esc(a.reason)}</span></div>`
       : `<div class="why"><b>측정</b><span>${esc(a.reason)}</span></div>`;
     return `<div class="axis"><span>${BC.AXES[k]}</span><div class="bar"><i style="width:${s}%;background:var(--${band(s)})"></i></div><span class="v">${s} ${d}</span>${lines}</div>`;
   }).join('');
   const aiPending= AIJOB && AIJOB.id===att.id || (att.stt && att.stt.state==='running');
   $('blendNote').textContent= fs.blended
-    ? '최종 점수 = 기기 측정과 AI 판단을 축마다 섞은 값 (측정:AI — 구조 4:6 · 억양 7:3 · 속도 8:2 · 언어 5:5). 종합 = 구조 30% · 억양 30% · 속도 20% · 언어 20%.'
-    : aiPending? '기기 측정 점수입니다. AI 심층 분석이 끝나면 축마다 AI 판단을 섞어 최종 점수를 다시 매깁니다.'
-    : '기기 측정만 반영한 점수입니다. AI 피드백을 받으면 축마다 AI 판단을 섞어 최종 점수를 다시 매깁니다.';
+    ? '점수와 코멘트는 AI가 받아 적은 내용과 기기 측정값을 함께 검토해 매겼습니다. "측정"은 기기가 잰 근거입니다. 종합 = 구조 30% · 억양 30% · 속도 20% · 언어 20%.'
+    : aiPending? '지금은 기기 측정으로 매긴 임시 점수입니다. AI 검토가 끝나면 AI가 매긴 점수와 코멘트로 바뀝니다.'
+    : '기기 측정만으로 매긴 간이 점수입니다. OpenAI 키를 연결하면 AI가 검토해 점수와 코멘트를 다시 씁니다.';
   // comparison
   const cc=$('compareCard');
   if(cmp && (cmp.items.length || cmp.delta!=null)){
@@ -2310,17 +2325,24 @@ function renderReview(){
   } else cc.hidden=true;
   // focus
   const useAI= att.ai && att.ai.focus.length;
-  $('focusSource').textContent= useAI? 'AI 코치' : '내장 코치';
-  $('focusSource').className= 'chip '+(useAI?'acc':'');
+  $('focusSource').textContent= useAI? 'AI 검토' : aiPending? '임시 · AI 검토 중' : '간이 코치';
+  $('focusSource').className= 'chip '+(useAI?'acc': aiPending?'warn':'');
   const focus= useAI? att.ai.focus : ev.findings.slice(0,3);
   $('focusList').innerHTML= focus.length? focus.map(f=>`<li><div class="f-title">${esc(f.title)}</div>${f.evidence?`<div class="f-ev"><b>문제</b>${esc(f.evidence)}</div>`:''}<div class="f-why">${esc(f.why)}</div><div class="f-how">${renderInline(f.how)}</div>${f.drill?`<div class="f-drill"><b>다음 시도 전 연습</b>${renderInline(f.drill)}</div>`:''}</li>`).join('')
     : '<li><div class="f-title">눈에 띄는 문제가 없습니다</div><div class="f-why">같은 내용을 목표 시간의 80%로 줄여 보거나, 예상 질문에 30초로 답하는 연습으로 넘어가 보세요.</div></li>';
-  const rest= useAI? ev.findings.slice(0,6) : ev.findings.slice(3,9);
+  // with an AI review the rule-based findings move into the folded measurement details
+  const rest= useAI? [] : ev.findings.slice(3,9);
   $('moreFindings').hidden=!rest.length;
-  $('moreFindings').querySelector('summary').textContent= useAI? '내장 코치가 측정한 항목' : '그 밖에 보이는 점';
+  $('moreFindings').querySelector('summary').textContent='그 밖에 보이는 점';
   $('moreList').innerHTML=rest.map(f=>`<li><b>${esc(f.title)}</b> <span class="muted">${esc(f.evidence)}</span></li>`).join('');
   const strengths= att.ai && att.ai.strengths.length? att.ai.strengths : ev.strengths;
   $('strengthCard').hidden=!strengths.length; $('strengthList').innerHTML=strengths.map(s=>`<li>${esc(s)}</li>`).join('');
+  $('measureFold').hidden=!att.ai;
+  if(att.ai){
+    const items=[...AXIS_ORDER.map(k=>`<li><b>${BC.AXES[k]} ${ev.scores[k]??'–'}</b> <span class="muted">${esc((ev.reasons||{})[k]||'')}</span></li>`),
+      ...ev.findings.map(f=>`<li><b>${esc(f.title)}</b> <span class="muted">${esc(f.evidence)}</span></li>`)];
+    $('measureList').innerHTML=items.join('');
+  }
   renderAI(att);
   renderDelivery(att);
   $('editFold').hidden= att.kind==='script';
@@ -2343,36 +2365,49 @@ function renderSttStatus(att){
   else ss.hidden=true;
 }
 function renderInline(text){ return renderMarkup(text).replace(/<\/?p>/g,' ').trim(); }
-function renderAI(att){
-  const box=$('aiCard');
-  if(att.stt && att.stt.state==='running'){ box.innerHTML='<div class="card-head"><h3>AI 코치 심층 피드백</h3></div><p class="small">받아 적기가 끝나면 AI 코칭을 시작합니다.</p>'; return; }
+function renderAI(att){ renderSummary(att); renderExtras(att); }
+function renderSummary(att){
+  const box=$('summaryCard'), a=att.ai;
+  const head=(chip)=>`<div class="card-head"><h3>총평</h3>${chip}</div>`;
+  if(att.stt && att.stt.state==='running'){ box.innerHTML=head('<span class="chip warn">받아 적는 중</span>')+'<div class="ai-wait"><span class="spinner"></span><span>받아 적기가 끝나면 AI가 브리프 전체를 검토합니다.</span></div>'; return; }
   if(AIJOB && AIJOB.id===att.id){
-    box.innerHTML=`<div class="card-head"><h3>AI 코치 심층 피드백</h3><button class="btn tiny" type="button" id="btnAICancel">취소</button></div><div class="ai-wait"><span class="spinner"></span><span>녹취와 측정값을 다시 듣고 정리하는 중입니다 · <span class="mono" id="aiElapsed">0초</span><br><span class="small">보통 20~60초 걸립니다. 위의 내장 코치 피드백을 먼저 보세요.</span></span></div>`;
+    box.innerHTML=head('<button class="btn tiny" type="button" id="btnAICancel">취소</button>')+`<div class="ai-wait"><span class="spinner"></span><span>AI가 받아 적은 내용과 측정값을 검토하고 있습니다 · <span class="mono" id="aiElapsed">0초</span><br><span class="small">보통 20~60초 걸립니다. 끝나면 점수와 코멘트가 모두 AI 검토 내용으로 바뀝니다. 아래는 기기 측정으로 만든 임시 결과입니다.</span></span></div>`;
     $('btnAICancel').onclick=()=>{ if(AIJOB) AIJOB.ctl.abort(); };
     return;
   }
-  if(!att.ai){
+  if(!a){
     const can=aiAvailable();
-    const msg= att.aiErr? `<p class="err">${esc(att.aiErr)}</p>` : can? '<p class="small">임원 관점의 한 줄 평가, 문장별 억양 지시, 30초 오프닝 재작성, 모범 스크립트, 예상 질문을 받아 볼 수 있습니다.</p>'
-      : ENV.inClaude? '<p class="small">이 화면에서는 AI 코치를 쓸 수 없습니다. 위의 내장 코치 피드백을 참고하세요.</p>' : '<p class="small">설정에서 OpenAI API 키를 넣으면 정확한 받아 적기, 임원 관점의 심층 피드백, 모범 스크립트와 낭독, 예상 질문을 받을 수 있습니다. 키가 없어도 위의 내장 코치 피드백은 그대로 쓸 수 있습니다.</p>';
-    box.innerHTML=`<div class="card-head"><h3>AI 코치 심층 피드백</h3></div>${msg}<div class="row">${can?`<button class="btn primary" type="button" id="btnAIRun">${att.aiErr?'다시 요청':'AI 피드백 받기'}</button>`: ENV.inClaude? '' : '<button class="btn" type="button" id="btnAISetup">AI 코치 연결하기</button>'}</div>`;
+    const msg= att.aiErr? `<p class="err">${esc(att.aiErr)}</p>`
+      : can? '<p class="lite-note">지금 보이는 점수와 코멘트는 기기 측정과 규칙으로 만든 간이 결과입니다. AI 검토를 받으면 총평, 고칠 점, 문장별 코멘트, 점수가 모두 AI 검토 내용으로 바뀝니다.</p>'
+      : ENV.inClaude? '<p class="lite-note">이 화면에서는 AI 검토를 쓸 수 없어 기기 측정과 규칙으로 만든 간이 결과만 보여 드립니다.</p>'
+      : '<p class="lite-note">지금 보이는 점수와 코멘트는 기기 측정과 규칙으로 만든 간이 결과입니다. 설정에서 OpenAI API 키를 연결하면 AI가 브리프 전체를 검토해 총평, 고칠 점, 문장별 코멘트, 점수를 다시 씁니다.</p>';
+    box.innerHTML=head('<span class="chip">간이 결과</span>')+msg+`<div class="row">${can?`<button class="btn primary" type="button" id="btnAIRun">${att.aiErr?'AI 검토 다시 요청':'AI 검토 받기'}</button>`: ENV.inClaude? '' : '<button class="btn primary" type="button" id="btnAISetup">OpenAI 키 연결하기</button>'}</div>`;
     const b1=$('btnAIRun'); if(b1) b1.onclick=()=>runAI(att);
     const b2=$('btnAISetup'); if(b2) b2.onclick=openSheet;
     return;
   }
-  const a=att.ai; const parts=[];
-  parts.push(`<div class="card-head"><h3>AI 코치 심층 피드백</h3><button class="btn tiny ghost" type="button" id="btnAIRun">다시 받기</button></div>`);
+  const parts=[head('<span class="row" style="gap:6px"><span class="chip acc">AI 검토</span><button class="btn tiny ghost" type="button" id="btnAIRun">다시 받기</button></span>')];
   if(a.headline) parts.push(`<p class="ai-headline">${esc(a.headline)}</p>`);
+  if(a.summary) parts.push(`<p class="ai-summary">${esc(a.summary)}</p>`);
   if(a.next_drill) parts.push(`<p class="f-drill"><b>다음 시도에서 집중할 한 가지</b>${esc(a.next_drill)}</p>`);
-  if(a.intonation_notes.length) parts.push(`<div class="ai-sec"><h4>문장별 억양·강세 지시</h4><div class="note-list">${a.intonation_notes.map((n,i)=>`<div class="note-item">${n.quote?`<q>${esc(n.quote)}</q>`:''}${n.issue?`<span class="muted">${esc(n.issue)}</span>`:''}${n.fix?`<div class="script-view compact">${renderMarkup(n.fix)}</div><div><button class="btn tiny" type="button" data-say="${i}">▶ 이렇게 들어 보기</button></div>`:''}</div>`).join('')}</div></div>`);
+  box.innerHTML=parts.join('');
+  $('btnAIRun').onclick=()=>runAI(att);
+}
+function renderExtras(att){
+  const box=$('aiCard'), a=att.ai;
+  if(!a){ box.hidden=true; box.innerHTML=''; return; }
+  const parts=[`<div class="card-head"><h3>AI 제안</h3></div>`];
+  const legacy= !(a.sentence_feedback && a.sentence_feedback.length) && a.intonation_notes && a.intonation_notes.length;
+  if(legacy) parts.push(`<div class="ai-sec"><h4>문장별 억양·강세 지시</h4><div class="note-list">${a.intonation_notes.map((n,i)=>`<div class="note-item">${n.quote?`<q>${esc(n.quote)}</q>`:''}${n.issue?`<span class="muted">${esc(n.issue)}</span>`:''}${n.fix?`<div class="script-view compact">${renderMarkup(n.fix)}</div><div><button class="btn tiny" type="button" data-say="${i}">▶ 이렇게 들어 보기</button></div>`:''}</div>`).join('')}</div></div>`);
   if(a.bluf_rewrite) parts.push(`<div class="ai-sec"><h4>30초 오프닝 다시 쓰기</h4><p>${esc(a.bluf_rewrite)}</p></div>`);
   if(a.model_script) parts.push(`<div class="ai-sec"><h4>모범 스크립트</h4><div class="script-view compact">${renderMarkup(a.model_script)}</div><div class="row"><button class="btn primary" type="button" id="btnUseScript">이 스크립트로 연습</button><button class="btn" type="button" id="btnSpeak">모범 낭독 듣기</button></div></div>`);
   if(a.exec_questions.length) parts.push(`<div class="ai-sec"><h4>임원이 바로 물을 질문</h4><ol class="qa">${a.exec_questions.map(q=>`<li>${esc(q)}</li>`).join('')}</ol></div>`);
-  box.innerHTML=parts.join('');
-  $('btnAIRun').onclick=()=>runAI(att);
+  box.hidden= parts.length<=1;
+  box.innerHTML=parts.join('').replace('<div class="ai-sec">','<div class="ai-sec" style="border-top:0;padding-top:0">');
+  const canSpeak=!!oaKey() || !!ENV.tts || ('speechSynthesis' in window);
   const bu=$('btnUseScript'); if(bu) bu.onclick=()=>{ S.guide={src:'ai', text:a.model_script}; store.set('bc.guide',S.guide); go('live'); };
-  const bs=$('btnSpeak'); if(bs){ const canSpeak=!!oaKey() || !!ENV.tts || ('speechSynthesis' in window); bs.hidden=!canSpeak; bs.onclick=()=>speak(a.model_script, bs); }
-  box.querySelectorAll('[data-say]').forEach(b=>{ const n=a.intonation_notes[+b.dataset.say]; b.hidden=!(oaKey()||ENV.tts||('speechSynthesis' in window)); b.onclick=()=>speak(n.fix, b); });
+  const bs=$('btnSpeak'); if(bs){ bs.hidden=!canSpeak; bs.onclick=()=>speak(a.model_script, bs); }
+  box.querySelectorAll('[data-say]').forEach(b=>{ const n=a.intonation_notes[+b.dataset.say]; b.hidden=!canSpeak; b.onclick=()=>speak(n.fix, b); });
 }
 function renderDelivery(att){
   const ev=att.ev, pros=att.pros, m=ev.m;
@@ -2382,7 +2417,10 @@ function renderDelivery(att){
   if(url){ if(au.dataset.id!==att.id){ au.src=url; au.dataset.id=att.id; } }
   else { au.removeAttribute('src'); au.dataset.id=''; }
   $('btnPlayAll').hidden=!url;
-  $('deliveryCard').querySelector('h3').textContent= att.kind==='script'? '문장별 점검' : '문장별 전달 지도';
+  const fb={}; for(const x of (att.ai && att.ai.sentence_feedback)||[]) fb[x.n]=x;
+  const hasFb=Object.keys(fb).length>0;
+  $('deliveryCard').querySelector('h3').textContent= hasFb? '문장별 코멘트' : att.kind==='script'? '문장별 점검' : '문장별 전달 지도';
+  const canSpeak=!!oaKey() || !!ENV.tts || ('speechSynthesis' in window);
   const units=ev.units;
   $('unitList').innerHTML= units.length? units.map((u,i)=>{
     const cls= u.trailing? 'trail' : u.contour;
@@ -2402,9 +2440,12 @@ function renderDelivery(att){
       if(u.runOn) chips.push('<span class="chip warn">긴 문장</span>');
     }
     const body= u.text? words : `<span class="muted">${att.source==='file'?`${fmt(u.start)}–${fmt(u.end)} 구간 (받아 적은 글 없음)`:'(받아 적은 글 없음)'}</span>`;
-    return `<div class="unit"><div class="u-end ${cls}" title="${esc(BC.CONTOUR_KO[u.contour]||'')}">${u.hasPros? glyph : i+1}</div><div class="u-text">${body}</div><div class="u-meta">${chips.join('')}</div></div>`;
+    const f=fb[i+1];
+    const aiRow= f? `<div class="u-ai ${f.verdict}"><b>${f.verdict==='fix'?'AI · 고칠 점':'AI · 좋음'}</b><span>${esc(f.comment)}</span></div>${f.verdict==='fix' && f.fix? `<div class="u-fix"><div class="script-view compact">${renderMarkup(f.fix)}</div>${canSpeak?`<div><button class="btn tiny" type="button" data-fix="${i+1}">▶ 이렇게 들어 보기</button></div>`:''}</div>`:''}` : '';
+    return `<div class="unit"><div class="u-end ${cls}" title="${esc(BC.CONTOUR_KO[u.contour]||'')}">${u.hasPros? glyph : i+1}</div><div class="u-body"><div class="u-text">${body}</div>${aiRow}${chips.length?`<div class="u-meta">${chips.join('')}</div>`:''}</div></div>`;
   }).join('') : '<p class="muted">분석할 문장이 없습니다.</p>';
   $('unitList').querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>playSpan(+b.dataset.play, +b.dataset.end));
+  $('unitList').querySelectorAll('[data-fix]').forEach(b=>b.onclick=()=>speak(fb[+b.dataset.fix].fix, b));
   if(hasCurve) requestAnimationFrame(()=>drawTake(att));
 }
 let playStop=null;

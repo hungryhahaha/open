@@ -195,7 +195,7 @@ test('markup becomes speakable text with stress words for TTS', () => {
   assert.deepEqual(stress, ['18억 원', '세 가지']);
 });
 
-test('final score blends device measurement with the AI score per axis and keeps the reasons', () => {
+test('with an AI review the AI score is final per axis; the measurement stays as the basis', () => {
   const ctx = { purpose: 'decision', target: 120, key: '', ask: '' };
   const ev = BC.evaluate(null, ['결론부터 말씀드리면 매출이 12% 줄었습니다', '다음 주까지 가격 조정을 승인해 주십시오'], ctx, 'ko-KR', { kind: 'script' });
   assert.match(ev.reasons.structure, /첫 30초 결론 O/);
@@ -203,7 +203,8 @@ test('final score blends device measurement with the AI score per axis and keeps
   assert.match(ev.reasons.delivery, /말한 뒤/);
   const ai = BC.normalizeAI({ scores: { structure: { score: 90, reason: '결론과 요청이 분명' }, delivery: { score: 80, reason: 'x' }, pace: { score: null, reason: '' }, language: { score: '70', reason: '단정형' } }, overall_reason: '구조가 탄탄함' });
   const fs = BC.finalScores(ev, ai);
-  assert.equal(fs.axes.structure.final, Math.round(0.4 * ev.scores.structure + 0.6 * 90));
+  assert.equal(fs.axes.structure.final, 90);
+  assert.equal(fs.axes.structure.measured, ev.scores.structure);
   assert.equal(fs.axes.structure.aiReason, '결론과 요청이 분명');
   assert.equal(fs.axes.delivery.final, null, 'no measurement: the AI score is not used');
   assert.equal(fs.axes.language.ai, 70);
@@ -212,6 +213,10 @@ test('final score blends device measurement with the AI score per axis and keeps
   const plain = BC.finalScores(ev, null);
   assert.equal(plain.overall, ev.overall);
   assert.equal(plain.blended, false);
+  // overall summary and a comment for every sentence come through; bad sentence numbers are dropped
+  const n2 = BC.normalizeAI({ summary: '총평', sentence_feedback: [{ n: 1, verdict: 'fix', comment: '끝이 올라감', fix: '이유는 / **세 가지**입니다 ↘' }, { n: 2, verdict: 'weird', comment: '좋음', fix: '' }, { n: 0, verdict: 'good', comment: 'x', fix: '' }] });
+  assert.equal(n2.summary, '총평');
+  assert.deepEqual(n2.sentence_feedback.map((x) => [x.n, x.verdict]), [[1, 'fix'], [2, 'good']]);
   // out-of-range AI scores are clamped
   assert.equal(BC.normalizeAI({ scores: { structure: { score: 140, reason: '' } } }).scores.structure.score, 100);
   // comparison deltas follow the final scores
