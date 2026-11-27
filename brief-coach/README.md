@@ -31,7 +31,7 @@
 
 1. Chrome으로 위 주소를 엽니다.
 2. 메뉴(⋮) → **앱 설치**(또는 홈 화면에 추가). 이후 홈 화면 아이콘으로 앱처럼 열립니다.
-3. 앱 오른쪽 위 설정 → AI 연결 → **OpenAI API 키**를 넣고 `연결 확인`. 쓸 수 있는 최신 GPT 모델을 코칭 모델로 자동 선택합니다.
+3. 앱 오른쪽 위 설정 → AI 연결 → **OpenAI API 키**(필요하면 Anthropic 키도)를 넣고 `연결 확인`. 코칭 모델은 GPT-6.1 Terra가 기본이며 GPT-6 Luna(가성비)부터 Astra·Claude Fable 5.2(최고 사양)까지 고를 수 있습니다.
    키는 OpenAI 플랫폼(platform.openai.com)의 API keys에서 발급하고, Billing에 크레딧을 넣어야 동작합니다. Limits에서 월 사용 한도를 걸어 두세요.
 4. 설정 → **기기 점검(10초)**: "하나, 둘, 셋…"을 말하면 마이크(억양 분석)와 OpenAI 받아 적기가 둘 다 되는지 확인합니다.
 5. 처음 녹음할 때 Chrome이 마이크 권한을 물으면 **허용**을 누릅니다. 거부했다면 주소창 왼쪽 아이콘 → 권한 → 마이크에서 바꿀 수 있습니다.
@@ -107,21 +107,42 @@ AI 검토가 없거나 아직 진행 중이면 기기 측정과 규칙으로 만
 - 지적할 때 문제 칸: `30초 안에 전달되는 내용: ○○ / 실제 결론: ○○`
 - AI 리뷰 프롬프트의 [점검 기준]에도 같은 기준이 들어 있어 AI 코칭도 같은 방식으로 판단합니다.
 
-## 5. AI 연결 (OpenAI 기본, Claude 선택)
+## 5. AI 연결 · 모델 선택 (2026년 11월 기준)
 
-설정 → AI 연결에서 엔진을 고릅니다. 키는 그 기기 브라우저(localStorage)에만 저장되고 해당 API 주소로만 전송됩니다.
+설정 → AI 연결에 OpenAI 키와 Anthropic 키를 각각 넣고(둘 중 하나만 있어도 됨) 코칭 모델을 고릅니다.
+키는 그 기기 브라우저(localStorage)에만 저장되고 해당 회사 API로만 전송됩니다. 가격은 입력/출력 100만 토큰당 참고 가격입니다.
 
-| 기능 | OpenAI (기본) | Claude |
-|---|---|---|
-| 받아 적기(STT) | 녹음이 끝난 뒤 최신 `gpt-transcribe`(기본)로 받아 적음. 키가 그 모델을 못 쓰면 `gpt-4o-transcribe`로 자동 전환하고 기억함. `gpt-4o-mini-transcribe`·`whisper-1`(문장 시간 정보)도 고를 수 있음. 말하는 동안에는 브라우저 음성 인식을 쓰지 않으므로 억양 분석과 마이크가 충돌하지 않음. 파일당 25MB까지 | 브라우저 음성 인식(실시간) |
-| 코칭·채점 | Responses API + JSON 스키마(strict). 총평, 고칠 점, 문장별 코멘트, 축별 점수와 이유를 받아 화면 전체를 AI 검토 내용으로 씀. 모델은 `연결 확인` 때 키로 쓸 수 있는 최신 `gpt-N` 모델을 자동 선택 | Claude Opus 5.5(기본) / Sonnet 5.5 / Haiku 5.5 |
-| 모범 낭독(TTS) | 키로 쓸 수 있는 가장 최신 `gpt-*-tts`(예: `gpt-4o-mini-tts` 최신 스냅숏): 강세 단어·문장 끝 하강·쉼을 낭독 지시로 전달. 목소리 선택 가능. `tts-1` 계열은 낭독 지시를 받지 않음 | 기기 음성(speechSynthesis) |
+**코칭 모델**
 
-- `연결 확인`을 누르면 키로 쓸 수 있는 모델 목록을 읽어 코칭·받아 적기·낭독 모델을 각각 가장 최신으로 고릅니다. 직접 고른 모델은 그대로 둡니다.
-- 받아 적기 결과는 문장으로 나눈 뒤, 기기에서 잰 말소리 구간(쉼)에 맞춰 문장마다 억양·강세를 붙입니다(`whisper-1`은 문장 시간 정보를 그대로 씁니다).
+| 구분 | 모델 | API ID | 등급 | 참고 가격 |
+|---|---|---|---|---|
+| GPT | GPT-6 Astra | `gpt-6-astra` | 최고 사양 | $10 / $50 |
+| GPT | GPT-6.1 Sol | `gpt-6.1-sol` | 고사양 | $2 / $10 |
+| GPT | **GPT-6.1 Terra** | `gpt-6.1-terra` | 균형 · 기본값 | $1 / $5 |
+| GPT | **GPT-6 Luna** | `gpt-6-luna` | 가성비 | $0.10 / $0.50 |
+| Claude | Claude Fable 5.2 | `claude-fable-5-2` | 최고 사양(답이 오래 걸릴 수 있음) | $8 / $40 |
+| Claude | Claude Opus 5.5 | `claude-opus-5-5` | 고사양 · Claude 권장 | $4 / $20 |
+| Claude | Claude Sonnet 5.5 | `claude-sonnet-5-5` | 균형 | $2 / $10 |
+| Claude | Claude Haiku 5.5 | `claude-haiku-5-5` | 가성비 | $0.10 / $0.50 |
+| Claude | Claude Opus 5 / Sonnet 5 | `claude-opus-5` / `claude-sonnet-5` | 이전 세대 | $5 / $25, $2 / $10 |
+
+- `연결 확인`을 누르면 그 키로 실제 쓸 수 있는 모델 목록을 읽어, 목록에 없는 모델에는 "이 키로 확인 안 됨"을 붙입니다. OpenAI 키로 쓸 수 있는 다른 GPT 모델도 아래에 함께 보여 줍니다.
+- 고른 GPT 모델을 그 키로 쓸 수 없으면 쓸 수 있는 모델(Terra → Luna → Sol → Astra 순)로 바꿔 검토하고 알려 줍니다.
+- GPT는 Responses API + JSON 스키마(strict), 분석 깊이 = reasoning effort. Claude는 Messages API + JSON 출력, 분석 깊이 = effort이며, Fable 5.2·Opus 5.5·Opus 5·Sonnet 5.5에는 정책상 거절 시 다른 모델로 이어 받는 서버측 대체(`fallbacks: "default"`)를 켭니다.
+
+**음성 — 받아 적기(STT)와 낭독(TTS)**
+
+Claude API에는 음성 인식·발화 기능이 없어, 코칭을 Claude로 해도 음성은 아래에서 고른 OpenAI 모델(OpenAI 키 필요)이나 브라우저·기기 기능을 씁니다.
+
+| 기능 | 선택지 |
+|---|---|
+| 받아 적기 | **GPT Transcribe** `gpt-transcribe`(최신·기본) · GPT-4o Transcribe · GPT-4o mini Transcribe(가성비) · Whisper `whisper-1`(문장 시간 정보) · 브라우저 실시간 받아 적기(무료) |
+| 낭독 | GPT-4o mini TTS `gpt-4o-mini-tts-2025-12-15`(최신·기본) · `gpt-4o-mini-tts` · TTS-1 HD · TTS-1(둘 다 낭독 지시 없음) · 기기 음성(무료) |
+
+- 받아 적기는 녹음이 끝난 뒤 녹음 파일을 보냅니다(파일당 25MB까지). 키가 고른 모델을 못 쓰면 `gpt-transcribe` → `gpt-4o-transcribe`로 바꾸고 기억합니다.
+- OpenAI 안내상 현재 낭독 모델(`gpt-4o-mini-tts` 계열, `tts-1` 계열)은 2027년 1월 6일 종료 예정이고, 후속은 Realtime API 전용(`gpt-realtime-2.1-mini`)입니다. 낭독이 실패하면 자동으로 기기 음성으로 읽습니다.
 - **보내는 것**: OpenAI 받아 적기를 쓰면 녹음 소리가, 코칭에는 받아 적은 글·측정값·보고 상황·지난 시도 요약이, 낭독에는 스크립트 글이 전송됩니다.
-  OpenAI API로 보낸 데이터는 OpenAI의 API 데이터 정책을 따릅니다.
-- 회사망에서 `api.openai.com`이 막혀 있으면 내장 코치와 억양 분석만 동작합니다.
+- 회사망에서 `api.openai.com`·`api.anthropic.com`이 막혀 있으면 내장 코치와 억양 분석만 동작합니다.
 
 ## 6. 알려진 제약
 

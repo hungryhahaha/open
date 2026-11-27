@@ -115,8 +115,7 @@ select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(
 .switch{display:flex;align-items:flex-start;gap:10px;font-size:14px;padding:6px 0}
 .switch input{width:20px;height:20px;margin-top:2px;accent-color:var(--accent);flex:none}
 .switch small{display:block;color:var(--ink-3);font-size:12.5px}
-#aiKeyBlock,#oaBlock,#clBlock{display:flex;flex-direction:column;gap:12px}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--sunken);border-radius:10px;padding:4px}
+#aiKeyBlock{display:flex;flex-direction:column;gap:12px}
 .seg label{position:relative;display:flex}
 .seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
 .seg span{flex:1;text-align:center;padding:8px;border-radius:8px;font-weight:600;font-size:14px;color:var(--ink-2)}
@@ -548,40 +547,24 @@ textarea.edit{min-height:180px;font-size:14.5px}
       <h3>AI 연결</h3>
       <div id="aiClaudeNote" hidden><p class="small">claude.ai 계정으로 바로 연결됩니다. 처음 요청할 때 한 번 허용을 물어봅니다.</p></div>
       <div id="aiKeyBlock">
-        <div class="seg" role="radiogroup" aria-label="AI 엔진">
-          <label><input type="radio" name="provider" value="openai"><span>OpenAI</span></label>
-          <label><input type="radio" name="provider" value="claude"><span>Claude</span></label>
-        </div>
-        <div id="oaBlock">
-          <p class="small">OpenAI 키 하나로 <b>받아 적기</b>(녹음 후), <b>모범 낭독</b>, <b>코칭</b>을 모두 씁니다.</p>
-          <label class="field"><span>OpenAI API 키</span><input type="password" id="setOaKey" autocomplete="off" placeholder="sk-…"></label>
-          <div class="row"><button class="btn" type="button" id="btnTestOa">연결 확인</button><span class="small" id="oaStatus"></span></div>
-          <p class="small">연결 확인을 누르면 이 키로 쓸 수 있는 모델 목록을 읽어 코칭·받아 적기·낭독 모델을 각각 가장 최신으로 고릅니다.</p>
-          <div class="grid2">
-            <label class="field"><span>코칭 모델</span><select id="setOaModel"><option value="">연결 확인 후 자동 선택</option></select></label>
-            <label class="field"><span>받아 적기(STT) 모델</span><select id="setOaStt"></select></label>
-            <label class="field"><span>낭독(TTS) 모델</span><select id="setOaTts"></select></label>
-            <label class="field"><span>낭독 목소리</span><select id="setOaVoice"><option value="coral">coral (따뜻한 여성)</option><option value="sage">sage (차분한 여성)</option><option value="shimmer">shimmer (밝은 여성)</option><option value="ash">ash (또렷한 남성)</option><option value="onyx">onyx (낮은 남성)</option><option value="echo">echo (부드러운 남성)</option><option value="alloy">alloy (중성)</option><option value="ballad">ballad</option><option value="verse">verse</option><option value="fable">fable</option><option value="nova">nova</option><option value="marin">marin</option><option value="cedar">cedar</option></select></label>
-            <label class="field"><span>분석 깊이</span><select id="setEffortOa"><option value="low">가볍게 (빠름)</option><option value="medium">보통 (권장)</option><option value="high">깊게</option></select></label>
-          </div>
-          <p class="small">키는 이 기기 브라우저에만 저장되고 OpenAI API(api.openai.com)로만 보내집니다. 받아 적기를 위해 녹음 소리가 OpenAI로 전송됩니다. OpenAI 대시보드에서 월 사용 한도를 걸어 두세요.</p>
-        </div>
-        <div id="clBlock" hidden>
-          <label class="field"><span>Claude API 키</span><input type="password" id="setKey" autocomplete="off" placeholder="sk-ant-…"></label>
-          <div class="grid2">
-            <label class="field"><span>모델</span><select id="setModel"><option value="claude-opus-5-5">Claude Opus 5.5 (권장)</option><option value="claude-sonnet-5-5">Claude Sonnet 5.5 (빠름)</option><option value="claude-haiku-5-5">Claude Haiku 5.5 (가장 빠름)</option></select></label>
-            <label class="field"><span>분석 깊이</span><select id="setEffort"><option value="low">가볍게</option><option value="medium">보통 (권장)</option><option value="high">깊게</option></select></label>
-          </div>
-          <div class="row"><button class="btn" type="button" id="btnTestKey">연결 확인</button><span class="small" id="keyStatus"></span></div>
-          <p class="small">Claude는 코칭만 합니다(받아 적기는 브라우저, 낭독은 기기 음성). 키는 이 기기 브라우저에만 저장되고 api.anthropic.com으로만 보내집니다.</p>
-        </div>
+        <label class="field"><span>OpenAI API 키 <em>· GPT 코칭, 받아 적기, 낭독</em></span><input type="password" id="setOaKey" autocomplete="off" placeholder="sk-…"></label>
+        <div class="row"><button class="btn" type="button" id="btnTestOa">OpenAI 연결 확인</button><span class="small" id="oaStatus"></span></div>
+        <label class="field"><span>Anthropic API 키 <em>· Claude 코칭</em></span><input type="password" id="setKey" autocomplete="off" placeholder="sk-ant-…"></label>
+        <div class="row"><button class="btn" type="button" id="btnTestKey">Claude 연결 확인</button><span class="small" id="keyStatus"></span></div>
+        <label class="field"><span>코칭 모델</span><select id="setCoachModel"></select></label>
+        <p class="small" id="coachNote"></p>
+        <label class="field"><span>분석 깊이</span><select id="setEffort"><option value="low">가볍게 (빠름)</option><option value="medium">보통 (권장)</option><option value="high">깊게</option></select></label>
+        <p class="small">키는 이 기기 브라우저에만 저장되고 각 회사 API(api.openai.com, api.anthropic.com)로만 보내집니다. 각 대시보드에서 월 사용 한도를 걸어 두세요. 모델 옆 가격은 입력/출력 100만 토큰당 참고 가격입니다(2026년 11월 기준).</p>
       </div>
-      <label class="switch"><input type="checkbox" id="setAutoAI"><span>연습이 끝나면 AI 피드백 자동 요청<small>끄면 피드백 화면에서 버튼을 눌러 요청합니다</small></span></label>
+      <label class="switch"><input type="checkbox" id="setAutoAI"><span>연습이 끝나면 AI 검토 자동 요청<small>끄면 피드백 화면에서 버튼을 눌러 요청합니다</small></span></label>
     </div>
     <div class="card">
-      <h3>받아 적기</h3>
-      <label class="switch"><input type="radio" name="stt" value="openai"><span>녹음 후 OpenAI가 받아 적기 <small>권장. 정확하고, 억양 분석과 마이크가 충돌하지 않습니다. OpenAI 키가 필요합니다</small></span></label>
-      <label class="switch"><input type="radio" name="stt" value="browser"><span>말하는 동안 브라우저가 받아 적기 <small>실시간·무료. 일부 안드로이드에서는 억양 분석과 동시에 못 쓸 수 있습니다</small></span></label>
+      <h3>음성 (받아 적기 · 낭독)</h3>
+      <p class="small">Claude에는 음성 인식·발화 API가 없습니다. 코칭을 Claude로 해도 받아 적기와 낭독은 여기서 고른 OpenAI 모델(OpenAI 키 필요)이나 브라우저·기기 기능을 씁니다.</p>
+      <label class="field"><span>받아 적기 (STT)</span><select id="setSttModel"></select></label>
+      <label class="field"><span>낭독 (TTS)</span><select id="setTtsModel"></select></label>
+      <label class="field"><span>낭독 목소리 <em>· OpenAI 낭독</em></span><select id="setOaVoice"><option value="coral">coral (따뜻한 여성)</option><option value="sage">sage (차분한 여성)</option><option value="shimmer">shimmer (밝은 여성)</option><option value="ash">ash (또렷한 남성)</option><option value="onyx">onyx (낮은 남성)</option><option value="echo">echo (부드러운 남성)</option><option value="alloy">alloy (중성)</option><option value="ballad">ballad</option><option value="verse">verse</option><option value="fable">fable</option><option value="nova">nova</option><option value="marin">marin</option><option value="cedar">cedar</option></select></label>
+      <p class="small" id="voiceNote"></p>
       <details class="more"><summary>브라우저 받아 적기 세부 방식</summary>
         <label class="switch"><input type="radio" name="mode" value="auto"><span>받아 적기 + 억양 분석 <small>기본</small></span></label>
         <label class="switch"><input type="radio" name="mode" value="pros"><span>억양 분석만 <small>받아 적기와 마이크가 충돌할 때. 내용은 원고 기준</small></span></label>
@@ -1451,7 +1434,7 @@ const store={
   set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } },
   del(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
-const DEF_SETTINGS={provider:'openai', oaKey:'', oaModel:'', oaStt:'gpt-transcribe', oaTts:'gpt-4o-mini-tts', oaVoice:'coral', stt:'openai', apiKey:'', model:'claude-opus-5-5', effort:'medium', mode:'auto', hints:true, vibrate:false, countdown:true, autoAI:true};
+const DEF_SETTINGS={provider:'openai', oaKey:'', oaModel:'gpt-6.1-terra', oaStt:'gpt-transcribe', oaTts:'gpt-4o-mini-tts-2025-12-15', oaVoice:'coral', stt:'openai', tts:'openai', apiKey:'', model:'claude-opus-5-5', effort:'medium', mode:'auto', hints:true, vibrate:false, countdown:true, autoAI:true};
 const DEF_CTX={audience:'exec', purpose:'decision', target:120, lang:'ko-KR', key:'', ask:'', script:''};
 const S={
   settings:{...DEF_SETTINGS, ...store.get('bc.settings',{})},
@@ -1551,9 +1534,9 @@ function refreshEnv(){
   const chip=(ok,label)=>`<span class="chip ${ok===true?'good':ok===false?'bad':''}">${ok===true?'✓':ok===false?'✕':'·'} ${label}</span>`;
   $('statusList').innerHTML=[
     chip(ENV.micOK===true? true : (ENV.micOK===false || !micPossible())? false : null, '억양 분석(마이크)'),
-    chip(sttAvailable()? true:false, oaSTTOn()? '받아 적기(OpenAI)' : '받아 적기(브라우저)'),
-    chip(aiAvailable()? true:false, ENV.inClaude? 'AI 코치(Claude)' : S.settings.provider==='claude'? 'AI 코치(Claude)' : 'AI 코치(OpenAI)'),
-    chip(!!(oaKey()||ENV.tts||('speechSynthesis' in window)), oaKey()? '모범 낭독(OpenAI)' : '모범 낭독(기기 음성)')
+    chip(sttAvailable()? true:false, oaSTTOn()? `받아 적기(${modelName(S.settings.oaStt)})` : '받아 적기(브라우저)'),
+    chip(aiAvailable()? true:false, ENV.inClaude? 'AI 코치(Claude)' : `AI 코치(${modelName(coachModelId())})`),
+    chip(!!(oaKey()||ENV.tts||('speechSynthesis' in window)), (oaKey() && S.settings.tts!=='device')? `낭독(${modelName(S.settings.oaTts)})` : '낭독(기기 음성)')
   ].join('');
   $('aiClaudeNote').hidden=!ENV.inClaude; $('aiKeyBlock').hidden=ENV.inClaude;
   if(!R && currentView()==='live') setIdleUI();
@@ -2019,7 +2002,7 @@ const AI_ERR={auth:'API 키가 맞지 않습니다. 설정에서 키를 확인�
   sampling_disabled:'이 계정에서는 Claude를 쓸 수 없습니다.', session_expired:'claude.ai에 다시 로그인해 주세요.', bad_request:'요청을 처리하지 못했습니다.', no_ai:'AI 코치가 연결되어 있지 않습니다.'};
 async function callClaudeAPI(system, user, signal, opts={}){
   const st=S.settings; const model=opts.model||st.model||'claude-opus-5-5';
-  const useFb= model!=='claude-haiku-5-5';
+  const useFb= CLAUDE_FALLBACK_OK.has(model);
   const body=opts.body || {model, max_tokens:16000, system, messages:[{role:'user', content:user}], output_config:{effort:st.effort||'medium', format:{type:'json_schema', schema:BC.AI_SCHEMA}}};
   const headers={'content-type':'application/json','x-api-key':(st.apiKey||'').trim(),'anthropic-version':'2026-10-21','anthropic-dangerous-direct-browser-access':'true'};
   if(useFb){ body.fallbacks='default'; headers['anthropic-beta']='server-side-fallback-2026-07-01'; }
@@ -2027,7 +2010,7 @@ async function callClaudeAPI(system, user, signal, opts={}){
   let res;
   try{ res=await send(); }catch(e){ if(e && e.name==='AbortError') throw {code:'cancelled'}; throw {code:'network'}; }
   if(res.status===400 && useFb){ const t=await res.clone().text().catch(()=> ''); if(/fallback/i.test(t)){ delete body.fallbacks; delete headers['anthropic-beta']; try{ res=await send(); }catch(e){ throw {code:'network'}; } } }
-  if(!res.ok){ let msg=''; try{ msg=((await res.json()).error||{}).message||''; }catch(e){} throw {code: res.status===401||res.status===403?'auth': res.status===429?'rate_limited': res.status>=500?'overloaded':'bad_request', message:msg}; }
+  if(!res.ok){ let msg=''; try{ msg=((await res.json()).error||{}).message||''; }catch(e){} throw {code: res.status===401||res.status===403?'auth': res.status===404?'model_missing': res.status===429?'rate_limited': res.status>=500?'overloaded':'bad_request', message:msg}; }
   const data=await res.json();
   if(opts.raw) return data;
   if(data.stop_reason==='refusal') throw {code:'refused'};
@@ -2058,32 +2041,82 @@ async function oaFetch(path, opts={}){
   return res;
 }
 function chatModels(ids){ return ids.filter(id=>/^(gpt-|o\d)/.test(id) && !/(audio|realtime|tts|transcribe|search|image|instruct|embedding|moderation|codex|computer|diarize)/.test(id)).sort(); }
+/* Model catalog as of 2026-11. Prices are input/output USD per 1M tokens, for reference. */
+const COACH_MODELS={
+  openai:[
+    {id:'gpt-6-astra', name:'GPT-6 Astra', tier:'최고 사양', price:'$10 / $50'},
+    {id:'gpt-6.1-sol', name:'GPT-6.1 Sol', tier:'고사양', price:'$2 / $10'},
+    {id:'gpt-6.1-terra', name:'GPT-6.1 Terra', tier:'균형 · 권장', price:'$1 / $5'},
+    {id:'gpt-6-luna', name:'GPT-6 Luna', tier:'가성비', price:'$0.10 / $0.50'}
+  ],
+  claude:[
+    {id:'claude-fable-5-2', name:'Claude Fable 5.2', tier:'최고 사양', price:'$8 / $40', note:'답이 오래 걸릴 수 있음'},
+    {id:'claude-opus-5-5', name:'Claude Opus 5.5', tier:'고사양 · 권장', price:'$4 / $20'},
+    {id:'claude-sonnet-5-5', name:'Claude Sonnet 5.5', tier:'균형', price:'$2 / $10'},
+    {id:'claude-haiku-5-5', name:'Claude Haiku 5.5', tier:'가성비', price:'$0.10 / $0.50'},
+    {id:'claude-opus-5', name:'Claude Opus 5', tier:'이전 세대', price:'$5 / $25'},
+    {id:'claude-sonnet-5', name:'Claude Sonnet 5', tier:'이전 세대', price:'$2 / $10'}
+  ]
+};
+const STT_MODELS=[
+  {id:'gpt-transcribe', name:'GPT Transcribe', tier:'최신 · 권장'},
+  {id:'gpt-4o-transcribe', name:'GPT-4o Transcribe', tier:'이전 세대'},
+  {id:'gpt-4o-mini-transcribe', name:'GPT-4o mini Transcribe', tier:'가성비'},
+  {id:'whisper-1', name:'Whisper', tier:'문장 시간 정보'}
+];
+const TTS_MODELS=[
+  {id:'gpt-4o-mini-tts-2025-12-15', name:'GPT-4o mini TTS (2025-12-15)', tier:'최신 · 권장'},
+  {id:'gpt-4o-mini-tts', name:'GPT-4o mini TTS', tier:'기본'},
+  {id:'tts-1-hd', name:'TTS-1 HD', tier:'낭독 지시 없음'},
+  {id:'tts-1', name:'TTS-1', tier:'낭독 지시 없음 · 빠름'}
+];
+const GPT_PREF=['gpt-6.1-terra','gpt-6-luna','gpt-6.1-sol','gpt-6-astra'];
+const CLAUDE_FALLBACK_OK=new Set(['claude-fable-5-2','claude-opus-5-5','claude-opus-5','claude-sonnet-5-5']);
+const modelInfo=id=> [...COACH_MODELS.openai, ...COACH_MODELS.claude, ...STT_MODELS, ...TTS_MODELS].find(m=>m.id===id) || null;
+const modelName=id=> (modelInfo(id)||{}).name || id || '';
+const coachModelId=()=> S.settings.provider==='claude'? S.settings.model : S.settings.oaModel;
 function pickOAModel(ids){
-  const ver=id=>{ const m=id.match(/^gpt-(\d+(?:\.\d+)?)$/); return m? parseFloat(m[1]) : null; };
-  const base=ids.filter(id=>ver(id)!=null).sort((a,b)=>ver(b)-ver(a));
+  const pref=GPT_PREF.find(id=>ids.includes(id)); if(pref) return pref;
+  const ver=id=>{ const m=id.match(/^gpt-(\d+(?:\.\d+)?)(?:-[a-z]+)?$/); return m? parseFloat(m[1]) : null; };
+  const base=ids.filter(id=>ver(id)!=null && !/-(?:mini|nano|pro)$/.test(id)).sort((a,b)=>ver(b)-ver(a));
   if(base.length) return base[0];
-  for(const p of ['gpt-4.1','gpt-4o']) if(ids.includes(p)) return p;
-  return ids.find(id=>/^gpt-/.test(id))||'';
+  return ids.find(id=>/^gpt-/.test(id))||'gpt-6.1-terra';
 }
-const STT_DEFAULT=['gpt-transcribe','gpt-4o-transcribe','gpt-4o-mini-transcribe','whisper-1'];
-const TTS_DEFAULT=['gpt-4o-mini-tts','tts-1-hd','tts-1'];
 function pickStt(list){ if(list.includes('gpt-transcribe')) return 'gpt-transcribe'; return list.find(id=>id!=='whisper-1') || list[0] || 'gpt-transcribe'; }
-function pickTts(list){ return list.find(id=>/^gpt-.*tts/.test(id)) || list[0] || 'gpt-4o-mini-tts'; }
-const STT_NOTE={'gpt-transcribe':'최신', 'gpt-4o-mini-transcribe':'저렴', 'whisper-1':'문장 시간 정보'};
-const TTS_NOTE={'tts-1':'낭독 지시 없음', 'tts-1-hd':'낭독 지시 없음'};
-function fillOneSelect(sel, list, cur, pick, notes){
-  const opts=[...new Set([...list, cur].filter(Boolean))];
-  sel.innerHTML=opts.map(m=>{ const n=[m===pick?'권장':'', notes[m]||''].filter(Boolean).join(' · '); return `<option value="${esc(m)}">${esc(m)}${n?` (${esc(n)})`:''}</option>`; }).join('');
-  sel.value=cur||pick;
-}
+function pickTts(list){ for(const m of TTS_MODELS) if(/^gpt-/.test(m.id) && list.includes(m.id)) return m.id; return list.find(id=>/^gpt-.*tts/.test(id)) || list[0] || 'gpt-4o-mini-tts-2025-12-15'; }
+const optHtml=(id,label)=>`<option value="${esc(id)}">${esc(label)}</option>`;
+function availMark(list, id){ return list && list.length && !list.includes(id)? ' — 이 키로 확인 안 됨' : ''; }
 function fillModelSelect(){
-  const sel=$('setOaModel'); const list=store.get('bc.oaModels',[]); const cur=S.settings.oaModel;
-  const opts=[...new Set([cur, ...list].filter(Boolean))];
-  sel.innerHTML= opts.length? opts.map(m=>`<option value="${esc(m)}">${esc(m)}${m===pickOAModel(list)?' (권장)':''}</option>`).join('') : '<option value="">연결 확인 후 자동 선택</option>';
-  sel.value=cur||'';
-  const stt=store.get('bc.oaStt',null)||STT_DEFAULT, tts=store.get('bc.oaTts',null)||TTS_DEFAULT;
-  fillOneSelect($('setOaStt'), stt, S.settings.oaStt, pickStt(stt), STT_NOTE);
-  fillOneSelect($('setOaTts'), tts, S.settings.oaTts, pickTts(tts), TTS_NOTE);
+  const st=S.settings, oaAll=store.get('bc.oaAll',null), clAll=store.get('bc.clAll',null);
+  const cur=coachModelId();
+  const extraGpt=store.get('bc.oaModels',[]).filter(id=>!COACH_MODELS.openai.some(m=>m.id===id));
+  if(st.provider!=='claude' && cur && !modelInfo(cur) && !extraGpt.includes(cur)) extraGpt.unshift(cur);
+  $('setCoachModel').innerHTML=
+    `<optgroup label="GPT · OpenAI 키">${COACH_MODELS.openai.map(m=>optHtml(m.id, `${m.name} · ${m.tier}${availMark(oaAll,m.id)}`)).join('')}</optgroup>`+
+    (extraGpt.length? `<optgroup label="그 밖에 이 OpenAI 키로 쓸 수 있는 모델">${extraGpt.map(id=>optHtml(id,id)).join('')}</optgroup>` : '')+
+    `<optgroup label="Claude · Anthropic 키">${COACH_MODELS.claude.map(m=>optHtml(m.id, `${m.name} · ${m.tier}${availMark(clAll,m.id)}`)).join('')}</optgroup>`;
+  $('setCoachModel').value=cur;
+  const sttExtra=[...store.get('bc.oaStt',[]), st.oaStt].filter((id,i,a)=>id && a.indexOf(id)===i && !STT_MODELS.some(m=>m.id===id));
+  $('setSttModel').innerHTML=
+    `<optgroup label="OpenAI · 녹음 후 받아 적기 (OpenAI 키)">${STT_MODELS.map(m=>optHtml(m.id, `${m.name} · ${m.tier}${availMark(oaAll,m.id)}`)).join('')}${sttExtra.map(id=>optHtml(id,id)).join('')}</optgroup>`+
+    `<optgroup label="무료"><option value="browser">브라우저 실시간 받아 적기</option></optgroup>`;
+  $('setSttModel').value= st.stt==='browser'? 'browser' : st.oaStt;
+  const ttsExtra=[...store.get('bc.oaTts',[]), st.oaTts].filter((id,i,a)=>id && a.indexOf(id)===i && !TTS_MODELS.some(m=>m.id===id));
+  $('setTtsModel').innerHTML=
+    `<optgroup label="OpenAI 낭독 (OpenAI 키)">${TTS_MODELS.map(m=>optHtml(m.id, `${m.name} · ${m.tier}${availMark(oaAll,m.id)}`)).join('')}${ttsExtra.map(id=>optHtml(id,id)).join('')}</optgroup>`+
+    `<optgroup label="무료"><option value="device">기기 음성</option></optgroup>`;
+  $('setTtsModel').value= st.tts==='device'? 'device' : st.oaTts;
+  renderModelNotes();
+}
+function renderModelNotes(){
+  const st=S.settings, cur=coachModelId(), info=modelInfo(cur), isClaude=st.provider==='claude';
+  const keyOk= isClaude? !!String(st.apiKey||'').trim() : !!oaKey();
+  $('coachNote').textContent=`${info? `${info.name} · ${info.tier} · ${info.price}${info.note? ' · '+info.note:''}` : cur} · ${isClaude?'Anthropic':'OpenAI'} 키 ${keyOk?'입력됨':'필요'}`;
+  const notes=[];
+  if(st.stt!=='browser' && !oaKey()) notes.push('OpenAI 키가 없어 지금은 브라우저 받아 적기를 씁니다.');
+  if(st.tts!=='device' && !oaKey()) notes.push('OpenAI 키가 없어 지금은 기기 음성으로 읽습니다.');
+  if(st.tts!=='device') notes.push('OpenAI 안내상 현재 낭독 모델들은 2027년 1월 6일 종료 예정입니다. 종료되거나 오류가 나면 자동으로 기기 음성으로 읽습니다.');
+  $('voiceNote').textContent=notes.join(' ');
 }
 async function loadOAModels(){
   const res=await oaFetch('/models'); const j=await res.json();
@@ -2093,7 +2126,7 @@ async function loadOAModels(){
   const stt=all.filter(m=>/transcribe/.test(m.id) && !/(diarize|live|realtime)/.test(m.id)).sort(newest).map(m=>m.id);
   if(ids.includes('whisper-1')) stt.push('whisper-1');
   const tts=all.filter(m=>/tts/.test(m.id) && !/realtime/.test(m.id)).sort(newest).map(m=>m.id);
-  store.set('bc.oaModels', chat); store.set('bc.oaStt', stt); store.set('bc.oaTts', tts);
+  store.set('bc.oaAll', ids); store.set('bc.oaModels', chat); store.set('bc.oaStt', stt); store.set('bc.oaTts', tts);
   // follow the newest model unless the user picked one by hand (and it is still available)
   const pin=S.settings.pinned||{};
   if(!pin.model || !ids.includes(S.settings.oaModel)) S.settings.oaModel=pickOAModel(chat.length? chat : ids);
@@ -2104,10 +2137,22 @@ async function loadOAModels(){
 }
 async function ensureOAModel(){ if(S.settings.oaModel) return S.settings.oaModel; await loadOAModels(); if(!S.settings.oaModel) throw {code:'model_missing'}; return S.settings.oaModel; }
 async function callOpenAI(system, user, signal){
+  try{ return await callOpenAIOnce(system, user, signal); }
+  catch(e){
+    // the key cannot use the chosen model: re-read the key's models, switch to an available one and try once more
+    if(!(e && e.code==='model_missing')) throw e;
+    const before=S.settings.oaModel;
+    try{ S.settings.pinned={...(S.settings.pinned||{}), model:false}; await loadOAModels(); }catch(_){ throw e; }
+    if(!S.settings.oaModel || S.settings.oaModel===before) throw e;
+    toast(`이 키로는 ${modelName(before)}를 쓸 수 없어 ${modelName(S.settings.oaModel)}로 검토합니다.`, 4200);
+    return await callOpenAIOnce(system, user, signal);
+  }
+}
+async function callOpenAIOnce(system, user, signal){
   const model=await ensureOAModel();
   const body={model, instructions:system, input:user, max_output_tokens:16000,
     text:{format:{type:'json_schema', name:'brief_feedback', strict:true, schema:BC.AI_SCHEMA}}};
-  if(/^(gpt-5|o\d)/.test(model)) body.reasoning={effort:S.settings.effort||'medium'};
+  if(/^(gpt-([5-9]|\d{2})|o\d)/.test(model)) body.reasoning={effort:S.settings.effort||'medium'};
   const send=()=>oaFetch('/responses',{method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body), signal});
   let res;
   try{ res=await send(); }
@@ -2219,9 +2264,9 @@ async function speakOpenAI(marked, btn){
     audio.onended=()=>resetTtsBtn();
     audio.src=url; await audio.play();
     if(btn && ttsBtn===btn){ btn.disabled=false; btn.textContent='멈추기'; }
-  }catch(e){ resetTtsBtn(); toast(e && e.code? (errText(e)||'낭독을 만들지 못했습니다.') : '낭독을 재생하지 못했습니다. 화면을 한 번 누른 뒤 다시 시도해 주세요.'); }
+  }catch(e){ resetTtsBtn(); if(e && e.code){ toast(`OpenAI 낭독을 쓸 수 없어 기기 음성으로 읽습니다. ${errText(e)||''}`, 4200); speakScript(marked, btn); return; } toast('낭독을 재생하지 못했습니다. 화면을 한 번 누른 뒤 다시 시도해 주세요.'); }
 }
-function speak(marked, btn){ return oaKey()? speakOpenAI(marked, btn) : speakScript(marked, btn); }
+function speak(marked, btn){ return (oaKey() && S.settings.tts!=='device')? speakOpenAI(marked, btn) : speakScript(marked, btn); }
 
 async function callAI(system, user, signal){
   if(ENV.inClaude){
@@ -2243,7 +2288,7 @@ async function runAI(att){
   const tick=setInterval(()=>{ const el=document.getElementById('aiElapsed'); if(el && AIJOB===job) el.textContent=Math.round((performance.now()-job.t0)/1000)+'초'; },1000);
   try{
     const out=await callAI(system, user, job.ctl.signal);
-    att.ai=BC.normalizeAI(out); att.aiErr=null; saveAttempts();
+    att.ai=BC.normalizeAI(out); att.aiErr=null; att.aiModel= ENV.inClaude? 'Claude' : modelName(coachModelId()); saveAttempts();
   }catch(e){
     const code=(e && e.code)||'upstream_error';
     if(code!=='cancelled'){ att.aiErr=errText(e)||'AI 코칭을 받지 못했습니다. 잠시 뒤 다시 요청해 주세요.'; if(code==='not_granted') ENV.sample=null; }
@@ -2386,7 +2431,7 @@ function renderSummary(att){
     const b2=$('btnAISetup'); if(b2) b2.onclick=openSheet;
     return;
   }
-  const parts=[head('<span class="row" style="gap:6px"><span class="chip acc">AI 검토</span><button class="btn tiny ghost" type="button" id="btnAIRun">다시 받기</button></span>')];
+  const parts=[head(`<span class="row" style="gap:6px"><span class="chip acc">AI 검토${att.aiModel? ' · '+esc(att.aiModel):''}</span><button class="btn tiny ghost" type="button" id="btnAIRun">다시 받기</button></span>`)];
   if(a.headline) parts.push(`<p class="ai-headline">${esc(a.headline)}</p>`);
   if(a.summary) parts.push(`<p class="ai-summary">${esc(a.summary)}</p>`);
   if(a.next_drill) parts.push(`<p class="f-drill"><b>다음 시도에서 집중할 한 가지</b>${esc(a.next_drill)}</p>`);
@@ -2635,11 +2680,8 @@ function deviceCheckOA(btn){
 /* ============ SETTINGS ============ */
 function renderSettings(){
   const st=S.settings;
-  $('setKey').value=st.apiKey||''; $('setModel').value=st.model; $('setEffort').value=st.effort; $('setEffortOa').value=st.effort;
-  $('setOaKey').value=st.oaKey||''; $('setOaVoice').value=st.oaVoice; fillModelSelect();
-  document.querySelectorAll('input[name=provider]').forEach(r=>{ r.checked= r.value===st.provider; });
-  document.querySelectorAll('input[name=stt]').forEach(r=>{ r.checked= r.value===st.stt; });
-  $('oaBlock').hidden= st.provider!=='openai'; $('clBlock').hidden= st.provider!=='claude';
+  $('setKey').value=st.apiKey||''; $('setOaKey').value=st.oaKey||''; $('setEffort').value=st.effort; $('setOaVoice').value=st.oaVoice;
+  fillModelSelect();
   $('setAutoAI').checked=!!st.autoAI; $('setCountdown').checked=!!st.countdown; $('setHints').checked=!!st.hints; $('setVibrate').checked=!!st.vibrate;
   document.querySelectorAll('input[name=mode]').forEach(r=>{ r.checked= r.value===st.mode; });
   refreshEnv();
@@ -2650,39 +2692,62 @@ $('btnSettings').addEventListener('click',openSheet);
 $('btnSheetClose').addEventListener('click',closeSheet);
 $('sheet').addEventListener('click',e=>{ if(e.target===$('sheet')) closeSheet(); });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !$('sheet').hidden){ e.preventDefault(); closeSheet(); } });
-$('setKey').addEventListener('change',e=>{ S.settings.apiKey=e.target.value.trim(); saveSettings(); refreshEnv(); $('keyStatus').textContent= S.settings.apiKey? '저장했습니다.':''; });
-$('setModel').addEventListener('change',e=>{ S.settings.model=e.target.value; saveSettings(); });
+$('setKey').addEventListener('change',e=>{ const k=e.target.value.trim(); if(k!==S.settings.apiKey) store.del('bc.clAll'); S.settings.apiKey=k; saveSettings(); fillModelSelect(); refreshEnv(); $('keyStatus').textContent= k? '저장했습니다. 연결 확인을 눌러 주세요.':''; });
 $('setEffort').addEventListener('change',e=>{ S.settings.effort=e.target.value; saveSettings(); });
-$('setEffortOa').addEventListener('change',e=>{ S.settings.effort=e.target.value; saveSettings(); });
-$('setOaKey').addEventListener('change',e=>{ const k=e.target.value.trim(); if(k!==S.settings.oaKey){ S.settings.oaKey=k; S.settings.oaModel=''; S.settings.pinned={}; store.del('bc.oaModels'); } saveSettings(); fillModelSelect(); refreshEnv(); $('oaStatus').textContent= k? '저장했습니다. 연결 확인을 눌러 주세요.':''; });
+$('setOaKey').addEventListener('change',e=>{ const k=e.target.value.trim(); if(k!==S.settings.oaKey){ S.settings.oaKey=k; ['bc.oaAll','bc.oaModels','bc.oaStt','bc.oaTts'].forEach(store.del); } saveSettings(); fillModelSelect(); refreshEnv(); $('oaStatus').textContent= k? '저장했습니다. 연결 확인을 눌러 주세요.':''; });
 const pinModel=k=>{ S.settings.pinned={...(S.settings.pinned||{}), [k]:true}; };
-$('setOaModel').addEventListener('change',e=>{ S.settings.oaModel=e.target.value; pinModel('model'); saveSettings(); });
-$('setOaStt').addEventListener('change',e=>{ S.settings.oaStt=e.target.value; pinModel('stt'); saveSettings(); });
+$('setCoachModel').addEventListener('change',e=>{
+  const id=e.target.value;
+  if(/^claude-/.test(id)){ S.settings.provider='claude'; S.settings.model=id; } else { S.settings.provider='openai'; S.settings.oaModel=id; pinModel('model'); }
+  saveSettings(); renderModelNotes(); refreshEnv();
+});
+$('setSttModel').addEventListener('change',e=>{
+  const v=e.target.value;
+  if(v==='browser') S.settings.stt='browser'; else { S.settings.stt='openai'; S.settings.oaStt=v; pinModel('stt'); }
+  saveSettings(); renderModelNotes(); refreshEnv();
+  if(v!=='browser' && !oaKey()) checkStatus('OpenAI 받아 적기를 쓰려면 위에 OpenAI API 키를 넣어 주세요. 그 전까지는 브라우저 받아 적기를 씁니다.','warn');
+});
+$('setTtsModel').addEventListener('change',e=>{
+  const v=e.target.value;
+  if(v==='device') S.settings.tts='device'; else { S.settings.tts='openai'; S.settings.oaTts=v; pinModel('tts'); }
+  saveSettings(); renderModelNotes(); refreshEnv();
+});
 $('setOaVoice').addEventListener('change',e=>{ S.settings.oaVoice=e.target.value; saveSettings(); });
-$('setOaTts').addEventListener('change',e=>{ S.settings.oaTts=e.target.value; pinModel('tts'); saveSettings(); });
-document.querySelectorAll('input[name=provider]').forEach(r=>r.addEventListener('change',e=>{ if(e.target.checked){ S.settings.provider=e.target.value; saveSettings(); renderSettings(); } }));
-document.querySelectorAll('input[name=stt]').forEach(r=>r.addEventListener('change',e=>{ if(e.target.checked){ S.settings.stt=e.target.value; saveSettings(); refreshEnv(); if(e.target.value==='openai' && !oaKey()) checkStatus('OpenAI 받아 적기를 쓰려면 위에 OpenAI API 키를 넣어 주세요. 그 전까지는 브라우저 받아 적기를 씁니다.','warn'); } }));
 $('btnTestOa').addEventListener('click',async()=>{
   const k=$('setOaKey').value.trim(); const os=$('oaStatus');
-  if(k!==S.settings.oaKey){ S.settings.oaKey=k; S.settings.oaModel=''; S.settings.pinned={}; store.del('bc.oaModels'); saveSettings(); }
+  if(k!==S.settings.oaKey){ S.settings.oaKey=k; ['bc.oaAll','bc.oaModels','bc.oaStt','bc.oaTts'].forEach(store.del); saveSettings(); }
   refreshEnv(); if(!k){ os.textContent='키를 먼저 넣어 주세요.'; return; }
   os.textContent='확인 중…'; $('btnTestOa').disabled=true;
   try{
-    const chat=await loadOAModels();
-    const ids=store.get('bc.oaModels',[]);
-    os.textContent=`연결됐습니다. 코칭 ${S.settings.oaModel||'없음'} · 받아 적기 ${S.settings.oaStt} · 낭독 ${S.settings.oaTts}.`;
-    if(!ids.length) os.textContent+=' 대화형 모델이 보이지 않습니다. 키의 권한(Models 읽기)을 확인해 주세요.';
+    await loadOAModels();
+    const all=store.get('bc.oaAll',[]);
+    const gptOk=COACH_MODELS.openai.filter(m=>all.includes(m.id)).map(m=>m.name);
+    os.textContent=`연결됐습니다. 이 키로 쓸 수 있는 GPT 코칭 모델: ${gptOk.length? gptOk.join(', ') : '목록에 없음'} · 받아 적기 ${modelName(S.settings.oaStt)} · 낭독 ${modelName(S.settings.oaTts)}.`;
   }catch(e){ os.textContent=errText(e)||'연결하지 못했습니다.'; }
-  finally{ $('btnTestOa').disabled=false; refreshEnv(); }
+  finally{ $('btnTestOa').disabled=false; fillModelSelect(); refreshEnv(); }
 });
 for(const [id,k] of [['setAutoAI','autoAI'],['setCountdown','countdown'],['setHints','hints'],['setVibrate','vibrate']]) $(id).addEventListener('change',e=>{ S.settings[k]=e.target.checked; saveSettings(); });
 document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',e=>{ if(e.target.checked){ S.settings.mode=e.target.value; saveSettings(); } }));
 $('btnTestKey').addEventListener('click',async()=>{
-  S.settings.apiKey=$('setKey').value.trim(); saveSettings(); refreshEnv();
-  const ks=$('keyStatus'); if(!S.settings.apiKey){ ks.textContent='키를 먼저 넣어 주세요.'; return; }
-  ks.textContent='확인 중…';
-  try{ await callClaudeAPI('', '', undefined, {raw:true, body:{model:S.settings.model, max_tokens:256, output_config:{effort:'low'}, messages:[{role:'user', content:'Reply with OK.'}]}}); ks.textContent='연결됐습니다.'; }
-  catch(e){ ks.textContent=AI_ERR[e && e.code]||'연결하지 못했습니다.'; }
+  const k=$('setKey').value.trim(); if(k!==S.settings.apiKey) store.del('bc.clAll');
+  S.settings.apiKey=k; saveSettings(); refreshEnv();
+  const ks=$('keyStatus'); if(!k){ ks.textContent='키를 먼저 넣어 주세요.'; return; }
+  ks.textContent='확인 중…'; $('btnTestKey').disabled=true;
+  const headers={'x-api-key':k,'anthropic-version':'2026-10-21','anthropic-dangerous-direct-browser-access':'true'};
+  try{
+    let res;
+    try{ res=await fetch('https://api.anthropic.com/v1/models?limit=100',{headers}); }catch(e){ throw {code:'network'}; }
+    if(res.status===401||res.status===403) throw {code:'auth'};
+    if(res.ok){
+      const ids=((await res.json()).data||[]).map(m=>String(m.id)); store.set('bc.clAll', ids);
+      const ok=COACH_MODELS.claude.filter(m=>ids.includes(m.id)).map(m=>m.name);
+      ks.textContent=`연결됐습니다. 이 키로 쓸 수 있는 Claude 코칭 모델: ${ok.length? ok.join(', ') : '목록에 없음'}.`;
+    } else {
+      await callClaudeAPI('', '', undefined, {raw:true, body:{model:S.settings.model, max_tokens:256, output_config:{effort:'low'}, messages:[{role:'user', content:'Reply with OK.'}]}});
+      ks.textContent='연결됐습니다.';
+    }
+  }catch(e){ ks.textContent=errText(e)||'연결하지 못했습니다.'; }
+  finally{ $('btnTestKey').disabled=false; fillModelSelect(); refreshEnv(); }
 });
 
 /* ---------- test hooks (only with ?test=1) ---------- */
@@ -2691,6 +2756,13 @@ if(isTest){
 }
 
 /* ---------- boot ---------- */
+if(!S.settings.modelsV3){
+  const pin=S.settings.pinned||{};
+  if(!pin.model || !S.settings.oaModel) S.settings.oaModel='gpt-6.1-terra';
+  if(!pin.tts) S.settings.oaTts='gpt-4o-mini-tts-2025-12-15';
+  if(!S.settings.tts) S.settings.tts='openai';
+  S.settings.modelsV3=true; S.settings.sttV2=true; saveSettings();
+}
 if(!S.settings.sttV2){ if(S.settings.oaStt==='gpt-4o-transcribe') S.settings.oaStt='gpt-transcribe'; S.settings.sttV2=true; saveSettings(); }
 for(const a of S.attempts) if(a.stt && a.stt.state==='running') a.stt={state:'error', msg:'화면을 다시 열면서 받아 적기가 중단됐습니다. 아래 "받아 적은 내용 고치기"에 직접 적을 수 있습니다.'};
 bindResetButtons(); updateBadge(); renderSettings();
